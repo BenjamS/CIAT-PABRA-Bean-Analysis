@@ -1,0 +1,470 @@
+library(tidyverse)
+library(patchwork)
+df_raw_vap <- read.csv("FAO Data/Value_of_Production_E_All_Data.csv", stringsAsFactors = F)
+
+rm_cols <- c("Area.Code", "Item.Code", "Element.Code")
+rm_cols <- which(colnames(df_raw_vap) %in% rm_cols)
+df_raw_vap <- df_raw_vap[, -rm_cols]
+df_raw_vap$Item <- as.character(df_raw_vap$Item)
+df_raw_vap$Element <- as.character(df_raw_vap$Element)
+df_raw_vap$Area <- as.character(df_raw_vap$Area)
+u <- colnames(df_raw_vap)
+df_raw_vap <- df_raw_vap[, -grep("F", u)]
+v <- colnames(df_raw_vap)[5:ncol(df_raw_vap)]
+colnames(df_raw_vap)[5:ncol(df_raw_vap)] <- gsub("Y", "", v)
+df_raw_vap <- gather(df_raw_vap,Year,Value,`1961`:`2016`)
+df_raw_vap <- subset(df_raw_vap, Element == "Gross Production Value (constant 2004-2006 million US$)")
+#----------------------------------------------------------------------------
+unique(df_raw_vap$Item[grep("milk", df_raw_vap$Item, ignore.case = T)])
+legume_vec <- c("Chick peas", "Peas, dry", "Peas, green",
+                "Cow peas, dry", "Pigeon peas", "Beans, dry",
+                "Beans, green", "Broad beans, horse beans, dry",
+                "Bambara beans", "Lentils", "Groundnuts, with shell")
+cereal_vec <- c("Wheat", "Maize", "Rice, paddy", "Sorghum", "Barley", "Millet")
+RnT_vec <- c("Cassava", "Potatoes", "Sweet potatoes", "Yams")
+animal_vec <- c("Meat, chicken", "Meat, pig", "Meat, cattle",
+                "Meat, goat", "Milk, whole fresh cow",
+                "Milk, whole fresh goat")
+#----------------------------------------------------------------------------
+africa_vec <- c("Eastern Africa", "Western Africa", "Southern Africa",
+                "Middle Africa", "Northern Africa")
+asia_vec <- c("Southern Asia", "Western Asia", "South-Eastern Asia", "Eastern Asia")
+america_vec <- c("Northern America", "South America", "Central America")
+#other_vec <-c("World", "Low Income Food Deficit Countries", "Net Food Importing Developing Countries", "Least Developed Countries")
+#----------------------------------------------------------------------------
+item_vec <- c(legume_vec, cereal_vec, RnT_vec, cereal_vec, animal_vec)
+area_vec <- c(africa_vec, america_vec, asia_vec, "Europe")
+df_vap <- subset(df_raw_vap, Item %in% item_vec)
+df_vap <- subset(df_vap, Area %in% area_vec)
+
+df_vap <- subset(df_vap, Item %in% item_vec)
+df_vap$Element <- NULL
+df_vap$Unit <- NULL
+colnames(df_vap)[4] <- "Gross Production Value (10^6 USD 2006)"
+df_vap$Group <- NA
+u <- df_vap$Item
+df_vap$Group[which(u %in% cereal_vec)] <- "Cereals"
+df_vap$Group[which(u %in% legume_vec)] <- "Legumes"
+df_vap$Group[which(u %in% RnT_vec)] <- "Roots & Tubers"
+df_vap$Group[which(u %in% animal_vec)] <- "Animal Products"
+#====================================================================
+df_raw_prod <- read.csv("FAO Data/Production_Crops_E_All_Data.csv", stringsAsFactors = F)
+df_raw_prod <- subset(df_raw_prod, Item.Code != 2928)
+df_raw_prod$Area.Code <- NULL
+df_raw_prod$Item.Code <- NULL
+df_raw_prod$Element.Code <-NULL
+df_raw_prod$Unit <- NULL
+u <- colnames(df_raw_prod)
+df_raw_prod <- df_raw_prod[, -grep("F", u)]
+last_yr <- (1961 + ncol(df_raw_prod) - 4)
+colnames(df_raw_prod)[4:ncol(df_raw_prod)] <- as.character(c(1961:last_yr))
+gathercols <- colnames(df_raw_prod)[4:ncol(df_raw_prod)]
+df_raw_prod <- gather_(df_raw_prod, "Year", "Value", gathercols)
+#------------------------------
+#unique(df_prod_raw$Item)[grep("beans", unique(df_prod_raw$Item), ignore.case = T)]
+df_prod <- subset(df_raw_prod, Item %in% item_vec)
+df_prod <- subset(df_prod, Area %in% area_vec)
+df_prod <- subset(df_prod, Element == "Production")
+df_prod <- subset(df_prod, Year > 1990)
+df_prod$Element <- NULL
+colnames(df_prod)[4] <- "Production (MT)"
+#-----------------------------
+df_prod$Group <- NA
+u <- df_prod$Item
+df_prod$Group[which(u %in% cereal_vec)] <- "Cereals"
+df_prod$Group[which(u %in% legume_vec)] <- "Legumes"
+df_prod$Group[which(u %in% RnT_vec)] <- "Roots & Tubers"
+#df_prod$Group <- factor(df_prod$Group)
+#===================================================================
+df_raw_ls <- read.csv("FAO Data/Production_LivestockPrimary_E_All_Data.csv", stringsAsFactors = F)
+df_raw_ls$Area.Code <- NULL
+df_raw_ls$Item.Code <- NULL
+df_raw_ls$Element.Code <-NULL
+df_raw_ls$Unit <- NULL
+u <- colnames(df_raw_ls)
+df_raw_ls <- df_raw_ls[, -grep("F", u)]
+last_yr <- (1961 + ncol(df_raw_ls) - 4)
+colnames(df_raw_ls)[4:ncol(df_raw_ls)] <- as.character(c(1961:last_yr))
+gathercols <- colnames(df_raw_ls)[4:ncol(df_raw_ls)]
+df_raw_ls <- gather_(df_raw_ls, "Year", "Value", gathercols)
+df_ls <- subset(df_raw_ls, Element == "Production")
+df_ls$Element <- NULL
+colnames(df_ls)[4] <- "Production (MT)"
+df_ls <- subset(df_ls, Item %in% animal_vec & Area %in% area_vec)
+df_ls$Group <- "Animal Products"
+#===================================================================
+df_Q <- rbind(df_prod, df_ls)
+df <- merge(df_vap, df_Q, by = c("Area", "Year", "Group", "Item"))
+df$`Price (USD/MT)` <- 10^6 * df$`Gross Production Value (10^6 USD 2006)` / df$`Production (MT)`
+df$`Gross Production Value (10^6 USD 2006)` <- NULL
+df$`Production (MT)` <- NULL
+#===================================================================
+# Define function for getting input matrix
+get_mat_X_in <- function(df, this_area, from_year, to_year = NULL, exclude_vec = NULL){
+  df_select <- subset(df, Area == this_area)
+  if(!is.null(exclude_vec)){
+    df_select <- subset(df_select, !(Item %in% exclude_vec))
+  }
+  df_select$Group <- NULL
+  df_select$Area <- NULL
+  df_select <- df_select %>% spread(Item, `Price (USD/MT)`)
+  df_select <- df_select[which(df_select$Year >= from_year), ]
+  if(!is.null(to_year)){
+    df_select <- subset(df_select, Year <= to_year)
+  }
+  year_vec <- df_select$Year
+  df_select$Year <- NULL
+  mat_select <- as.matrix(df_select)
+  row.names(mat_select) <- year_vec
+  mat_select <- diff(mat_select) / mat_select[-nrow(mat_select), ]
+  row.names(mat_select) <- as.character(year_vec[-1]) 
+  return(mat_select)
+}
+#======================================================================
+# Define function to calculate variable-signal correlations
+get_S_and_corrXS <- function(mat_X_in){
+  # mat_P = eigenvectors of the data correlation matrix
+  # mat_G = corresponding eigenvalues
+  mat_X_centered <- scale(mat_X_in, scale = F)
+  # out_svd <- svd(mat_X_centered)
+  # sing_values <- out_svd$d
+  # n_obs <- nrow(mat_X_centered)
+  # eig_values <- sing_values^2 / (n_obs - 1)
+  # mat_P <- out_svd$v
+  
+  mat_P <- eigen(cov(mat_X_in))$vectors
+  if(mean(mat_P[, 1]) < 0){mat_P <- -mat_P}
+  eig_values <- round(eigen(cov(mat_X_in))$values, 8)
+  mat_G <- diag(eig_values)
+  
+  #mat_P_sigs <- mat_P[, 1:n_signals]
+  # eig_values[1:n_signals] / eigen(cov(mat_X_centered))$values[1:n_signals] #check
+  # mat_P / eigen(cov(mat_X_in))$vectors #check
+  
+  #mat_G <- diag(eig_values)
+  
+  #mat_G_sigs <- matU[, 1:n_signals]
+  #---------------------------------------------
+  sd_X <- apply(mat_X_in, 2, sd)
+  D_sdX_inv <- diag(1 / sd_X)
+  cormat_XS <- D_sdX_inv %*% mat_P %*% sqrt(mat_G)
+  row.names(cormat_XS) <- colnames(mat_X_in)
+  mat_L <- cormat_XS
+  #mat_L <- diag(1 / apply(mat_X_in, 2, sd)) %*% mat_P %*% sqrt(mat_G)
+  #---------------------------------------------------------
+  # Set sign of eigenvectors such that signals best conform to their most highly correlated items
+  # First have to get average of highest correlated items for each signal
+  corrThresh <- 0.55
+  n_items <- ncol(mat_L)
+  list_X_hiCorr_avg <- list()
+  for(i in 1:n_items){
+    this_loadvec <- mat_L[, i]
+    ind_tracks <- which(abs(this_loadvec) >= corrThresh)
+    if(length(ind_tracks) == 0){
+      ind_tracks <- which(abs(this_loadvec) == max(abs(this_loadvec)))
+    }
+    if(length(ind_tracks) == 1){
+      list_X_hiCorr_avg[[i]] <- mat_X_centered[, ind_tracks]
+    }else{
+      loadvec_kept <- this_loadvec[ind_tracks]
+      list_X_hiCorr_avg[[i]] <- rowMeans(mat_X_centered[, ind_tracks])
+      
+    }
+  }
+  mat_X_hiCorr_avg <- do.call(cbind, list_X_hiCorr_avg)
+  mat_S_all <- mat_X_centered %*% mat_P
+  #mat_S_all <- mat_X_in %*% mat_P
+  for(i in 1:n_items){
+    this_S <- mat_S_all[, i]
+    this_X_hiCorr_avg <- mat_X_hiCorr_avg[, i]
+    mse <- mean((this_S - this_X_hiCorr_avg)^2)
+    mse_neg <- mean((-this_S - this_X_hiCorr_avg)^2)
+    if(mse_neg < mse){
+      mat_P[, i] <- -mat_P[, i]
+    }
+  }
+  cormat_XS <- D_sdX_inv %*% mat_P %*% sqrt(mat_G)
+  row.names(cormat_XS) <- colnames(mat_X_in)
+  mat_L <- cormat_XS
+  mat_S_all <- mat_X_centered %*% mat_P
+  #---------------------------------------------
+  # res <- FactoMineR::PCA(mat_pctDiff_in, scale.unit = F, ncp = ncol(mat_pctDiff_in), graph = F)
+  # mat_L_FactoMiner <- res$var$coord
+  # mat_L / mat_L_FactoMiner
+  
+  list_out <- list(mat_S_all, cormat_XS, eig_values, mat_P)
+  return(list_out)
+}
+#====================================================
+# Barchart of variable-signal correlations
+plot_corrXS_barchart <- function(mat_L, group_info = NULL, xAxis_title = NULL, sigNames = NULL){
+  
+  n_signals <- ncol(mat_L)
+  df_plot <- data.frame(Item = row.names(mat_L), mat_L)
+  df_plot$Item <- as.character(df_plot$Item)
+  #-------------------------------------------------------
+  if(is.null(sigNames)){
+    signal_id <- paste("Signal", 1:n_signals)
+  }else{
+    signal_id <- paste("Signal", 1:n_signals, "\n", sigNames)
+  }
+  colnames(df_plot)[2:(n_signals + 1)] <- signal_id
+  #-------------------------------------------------------
+  gathercols <- as.character(signal_id) 
+  df_plot <- gather_(df_plot, "Signal", "Correlation", gathercols)
+  df_plot <- transform(df_plot,
+                       Signal = factor(Signal, levels = gathercols))
+  
+  if(!is.null(group_info)){
+    outlist <- group_fn(group_info)
+    cols_ordered_by_group <- outlist[[1]]
+    group_color_vec <- outlist[[2]]
+    group_vec_ordered <- outlist[[3]]
+    df_match_group <- data.frame(Item = cols_ordered_by_group, Group = group_vec_ordered)
+    df_plot <- merge(df_plot, df_match_group, by = "Item")
+    df_plot <- df_plot[order(df_plot$Group), ]
+    df_plot$Item <- factor(df_plot$Item, levels = unique(df_plot$Item))
+    gg <- ggplot(df_plot, aes(x = Item, y = Correlation, fill = Group))
+    gg <- gg + scale_fill_manual(values = unique(group_color_vec))
+  }else{
+    gg <- ggplot(df_plot, aes(x = Item, y = Correlation))
+  }
+  gg <- gg + geom_bar(stat = "identity", color = "black", position = "dodge")
+  gg <- gg + ylim(limits = c(-1, 1))
+  gg <- gg + facet_wrap(~ Signal, nrow = 1)
+  if(!is.null(xAxis_title)){
+    gg <- gg + labs(y = xAxis_title)
+  }
+  gg <- gg + theme(axis.text = element_text(size = 7),
+                   axis.title.x = element_text(size = 7),
+                   axis.title.y = element_blank(),
+                   legend.title = element_blank(),
+                   legend.text = element_text(size = 7),
+                   strip.text = element_text(size = 7))
+  gg <- gg + coord_equal()
+  gg <- gg + coord_flip()
+  gg
+  
+}
+#=====================================================================
+# Define function to order data by group
+group_fn <- function(group_info){
+  list_groups <- group_info[[1]]
+  group_names <- group_info[[2]]
+  group_colors <- group_info[[3]]
+  varNames_ordered <- do.call(c, list_groups)
+  n_groups <- length(group_names)
+  n_items <- length(varNames_ordered)
+  if(is.na(group_colors)){
+    bag_of_colors <- randomcoloR::distinctColorPalette(k = 5 * n_groups)
+    group_colors <- sample(bag_of_colors, n_groups)
+    #group_colors <- viridis::viridis_pal(option = "D")(length(group_names))
+  }
+  #if(reverse_order){group_colors <- rev(group_colors)}
+  #varNames_ordered <- colnames(mat_pctDiff)
+  group_vec <- rep(NA, n_items)
+  group_color_vec <- rep(NA, n_items)
+  for(i in 1:n_groups){
+    this_group_vec <- list_groups[[i]]
+    this_group_name <- group_names[i]
+    this_group_color <- group_colors[i]
+    group_vec[which(varNames_ordered %in% this_group_vec)] <- this_group_name
+    group_color_vec[which(varNames_ordered %in% this_group_vec)] <- this_group_color
+  }
+  ind_ordered_cols <- order(factor(group_vec))
+  cols_ordered_by_group <- as.character(varNames_ordered[ind_ordered_cols])
+  group_color_vec <- group_color_vec[ind_ordered_cols]
+  group_vec_ordered <- group_vec[ind_ordered_cols]
+  out_list <- list(cols_ordered_by_group, group_color_vec, group_vec_ordered, ind_ordered_cols, group_vec)
+  return(out_list)
+}
+#group_info <- list(list_groups, group_names, group_colors)
+#=======================================================================
+plot_sigs_wHiLoad_items <- function(mat_X_in, mat_S, mat_L, color_vec, sigNames = NULL, load_threshold = 0.55, n_display_max = 4){
+  n_signals <- ncol(mat_L)
+  if(is.null(sigNames)){
+    fig_title_vec <- paste("Signal", 1:n_signals)
+  }else{
+    fig_title_vec <- paste("Signal", 1:n_signals, "-", sigNames)
+  }
+  if(is.null(color_vec)){
+    n_items <- ncol(mat_X_in)
+    bag_of_colors <- randomcoloR::distinctColorPalette(k = 5 * n_items)
+    color_vec <- sample(bag_of_colors, n_items)
+  }
+  # Plot signals against highest correlated variables
+  date_vec <- row.names(mat_S)
+  xAxis_labels <- date_vec[seq(1, nrow(mat_S), length.out = 5)]
+  list_gg <- list()
+  for(i in 1:n_signals){
+    this_loadvec <- mat_L[, i]
+    ind_tracks <- which(abs(this_loadvec) >= load_threshold)
+    if(length(ind_tracks) == 0){
+      ind_tracks <- which(abs(this_loadvec) == max(abs(this_loadvec)))
+    }
+    
+    n_display <- length(ind_tracks)
+    loadvec_kept <- this_loadvec[ind_tracks]
+    if(n_display > n_display_max){
+      n_to_omit <- n_display - n_display_max
+      #random_omission <- sample(1:n_display, n_to_omit)
+      #mat_pctDiff_tracks <- mat_pctDiff_tracks[, -random_omission]
+      ind_omit <- order(loadvec_kept)[c(1:n_to_omit)]
+      ind_tracks <- ind_tracks[-ind_omit]
+      loadvec_kept <- this_loadvec[ind_tracks]
+    }
+    mat_X_tracks <- mat_X_in[, ind_tracks]
+    color_vec_tracks <- color_vec[ind_tracks]
+    #------------
+    df_plot_sig <- data.frame(Date = date_vec, Value = mat_S[, i])
+    df_plot_tracks <- data.frame(Date = date_vec, mat_X_tracks)
+    if(ncol(df_plot_tracks) > 2){
+      gathercols <- colnames(mat_X_tracks)
+      colnames(df_plot_tracks)[-1] <- gathercols
+      df_plot_tracks <- df_plot_tracks %>% gather_("ts", "Value", gathercols)
+    }else{
+      colnames(df_plot_tracks)[-1] <- "Value"
+      df_plot_tracks$ts <- colnames(mat_X_in)[ind_tracks]
+    }
+    #------------
+    gg <- ggplot()
+    gg <- gg + geom_line(data = df_plot_sig, aes(x = Date, y = Value, group = 1), color = "grey", lwd = 1.3)
+    gg <- gg + geom_line(data = df_plot_tracks, aes(x = Date, y = Value, group = ts, color = ts))
+    gg <- gg + scale_color_manual(values = color_vec_tracks)
+    gg <- gg + scale_x_discrete(breaks = xAxis_labels)
+    gg <- gg + labs(title = fig_title_vec[i])
+    
+    if(i == n_signals){
+      #gg <- gg + labs(title = paste("Signal", i), caption = fig_title)
+      gg <- gg + theme(axis.text.x = element_text(size = 7),
+                       axis.text.y = element_text(size = 7),
+                       axis.title.x = element_blank(),
+                       axis.title.y = element_blank(),
+                       legend.title = element_blank(),
+                       legend.text = element_text(size = 7),
+                       plot.title = element_text(size = 7)
+                       #plot.caption = element_text(hjust = 0, size = 10)
+      )
+    }else{
+      gg <- gg + theme(axis.text.x = element_blank(),
+                       axis.text.y = element_text(size = 7),
+                       axis.title.x = element_blank(),
+                       axis.title.y = element_blank(),
+                       legend.title = element_blank(),
+                       legend.text = element_text(size = 7),
+                       plot.title = element_text(size = 7))
+    }
+    
+    list_gg[[i]] <- gg
+    
+  }
+  
+  gg_all <- wrap_plots(list_gg) + plot_layout(ncol = 1)
+  gg_all
+}
+
+#========================================================================
+#area_vec
+#item_vec
+this_area <- "Western Africa"
+exclude_vec <- NULL#"Cow peas, dry"#c("Broad beans, horse beans, dry", "Cow peas, dry")#"Millet"
+from_year <- 1992
+to_year <- NULL#2013
+mat_X_in <- get_mat_X_in(df, this_area, from_year, to_year, exclude_vec)
+eig_values <- round(eigen(cov(mat_X_in))$values, 8)
+c_vec <- eig_values / sum(eig_values)
+ck_vec <- cumsum(c_vec)
+df_plot <- data.frame(Signal = paste("Signal", 1:length(eig_values)), Portion_explained = c_vec, Portion_explained_cumul = ck_vec)
+colnames(df_plot)[2:3] <- c("Individually", "Cumulatively")
+gathercols <- colnames(df_plot)[2:3]
+df_plot <- gather_(df_plot, "Portion explained", "Value", gathercols)
+df_plot$Signal <- factor(df_plot$Signal,
+                         levels = unique(df_plot$Signal),
+                         ordered = T)
+gg <- ggplot(df_plot, aes(x = Signal, y = Value, fill = `Portion explained`))
+gg <- gg + geom_bar(stat = "identity", color = "black", position = "dodge")
+gg <- gg + scale_fill_manual(values = c("wheat3", "paleturquoise"))
+gg <- gg + geom_hline(yintercept = 0.9, color = "coral", size = 1, linetype = "dashed")
+gg <- gg + theme(axis.text.y = element_text(size = 7),
+                 axis.text.x = element_text(size = 7, angle = 60, hjust = 1),
+                 axis.title = element_blank(),
+                 legend.title = element_text(size = 8),
+                 legend.text = element_text(size = 8))
+
+gg
+#====================================================
+n_signals <- which(ck_vec > 0.9)[1]
+n_signals
+#n_signals <- 2
+#====================================================
+list_out <- get_S_and_corrXS(mat_X_in)
+mat_S_all <- list_out[[1]]
+cormat_XS <- list_out[[2]]
+eig_values <- list_out[[3]]
+mat_P <- list_out[[4]]
+mat_S <- mat_S_all[, 1:n_signals]
+mat_L <- cormat_XS[, 1:n_signals]
+list_groups <- list(legume_vec, cereal_vec, animal_vec, RnT_vec)
+group_names <- c("Legumes", "Cereals", "Animal Products", "Roots & Tubers")
+n_groups <- length(group_names)
+bag_of_colors <- randomcoloR::distinctColorPalette(k = 5 * n_groups)
+group_colors <- sample(bag_of_colors, n_groups)
+group_info <- list(list_groups, group_names, group_colors)
+plot_corrXS_barchart(mat_L, group_info)
+
+
+mat_Lrot <- varimax(mat_L)[[1]]
+mat_Lrot <- matrix(as.numeric(mat_Lrot),
+                   attributes(mat_Lrot)$dim,
+                   dimnames = attributes(mat_Lrot)$dimnames)
+mat_R <- varimax(mat_L)[[2]]
+mat_R <- matrix(as.numeric(mat_R),
+                attributes(mat_R)$dim,
+                dimnames = attributes(mat_R)$dimnames)
+
+xAxis_title <- "Varimax Rotated Correlation"
+plot_corrXS_barchart(mat_Lrot, group_info, xAxis_title, sigNames = NULL)
+
+
+plot_sigs_wHiLoad_items(mat_X_in, mat_S, mat_L, color_vec = NULL, sigNames = NULL, load_threshold = 0.55, n_display_max = 4)
+
+
+
+
+
+#============================================================================
+# df_raw_fbal_1 <- read.csv("FAO Data/FoodBalanceSheetsHistoric_E_All_Data.csv", stringsAsFactors = F)
+# df_raw_fbal_1 <- subset(df_raw_fbal_1, Item.Code != 2928)
+# df_raw_fbal_2 <- read.csv("FAO Data/FoodBalanceSheets_E_All_Data.csv", stringsAsFactors = F)
+# df_raw_fbal_2 <- subset(df_raw_fbal_2, Item.Code != 2928)
+# rm_cols <- c("Area.Code", "Item.Code", "Element.Code")
+# rm_cols <- which(colnames(df_raw_fbal_1) %in% rm_cols)
+# df_raw_fbal_1 <- df_raw_fbal_1[, -rm_cols]
+# df_raw_fbal_2 <- df_raw_fbal_2[, -rm_cols]
+# df_raw_fbal <- merge(df_raw_fbal_1, df_raw_fbal_2, by = c("Area", "Item", "Element", "Unit"))
+# df_raw_fbal$Item <- as.character(df_raw_fbal$Item)
+# df_raw_fbal$Element <- as.character(df_raw_fbal$Element)
+# df_raw_fbal$Area <- as.character(df_raw_fbal$Area)
+# u <- colnames(df_raw_fbal)
+# df_raw_fbal <- df_raw_fbal[, -grep("F", u)]
+# v <- colnames(df_raw_fbal)[5:ncol(df_raw_fbal)]
+# colnames(df_raw_fbal)[5:ncol(df_raw_fbal)] <- gsub("Y", "", v)
+# df_raw_fbal <- gather(df_raw_fbal,Year,Value,`1961`:`2017`)
+# #------------------------------------------------------------------------
+# #unique(df_raw_fbal$Item)[grep("pea", unique(df_raw_fbal$Item), ignore.case = T)]
+# cereal_fbal_vec <- c("Maize and products", "Wheat and products", "Millet and products", "Sorghum and products",
+#                      "Rice (Milled Equivalent)")
+# pulses_oilcrops_fbal_vec <- c("Beans", "Groundnuts (Shelled Eq)", "Soyabeans")
+# RnT_fbal_vec <- c("Cassava and products", "Sweet potatoes", "Yams", "Potatoes and products")
+# item_fbal_vec <- c(cereal_fbal_vec, pulses_oilcrops_fbal_vec, RnT_fbal_vec)
+# 
+# 
+# unique(df_raw_fbal$Element)
+# unique(df_raw_fbal$Item)
+# 
+# 
+# 
+# #element_vec <- c("Protein supply quantity (g/capita/day)", "Fat supply quantity (g/capita/day)", "Food supply quantity (kg/capita/yr)")
+# 
+# 
+# 
