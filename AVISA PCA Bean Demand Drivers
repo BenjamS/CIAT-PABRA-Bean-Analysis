@@ -101,13 +101,56 @@ colnames(df_fbal_kcalTot)[2] <- "kcal/capita/day Total"
 #---
 df_fbal_kcal <- df_fbal_kcal %>% spread(Item, `kcal/capita/day`)
 colnames(df_fbal_kcal)[-1] <- paste("kcal/capita/day", colnames(df_fbal_kcal)[-1])
+df_fbal_kcal <- df_fbal_kcal[which(!is.na(df_fbal_kcal$`kcal/capita/day Pulses`)), ]
+df_fbal_kcal <- df_fbal_kcal[which(!is.na(df_fbal_kcal$`kcal/capita/day Other`)), ]
 df_fbal_kcalShare <- df_fbal_kcalShare %>% spread(Item, `kcal share`)
 colnames(df_fbal_kcalShare)[-1] <- paste("kcal share", colnames(df_fbal_kcalShare)[-1])
+df_fbal_kcalShare <- df_fbal_kcalShare[which(!is.na(df_fbal_kcalShare$`kcal share Pulses`)), ]
+df_fbal_kcalShare <- df_fbal_kcalShare[which(!is.na(df_fbal_kcalShare$`kcal share Other`)), ]
 df_fbal <- plyr::join_all(list(df_fbal_kcal, df_fbal_kcalShare, df_fbal_kcalTot))
 # df_fbal <- merge(df_fbal_kcal, df_fbal_kcalShare, by = "Area")
 # df_fbal <- merge(df_fbal, df_fbal_kcalTot)
 fbalCols_kcal <- c(colnames(df_fbal_kcal), colnames(df_fbal_kcalTot)[2])
 fbalCols_kcalShare <- colnames(df_fbal_kcalShare)
+#=======================================================================
+# Define function to plot covariance/correlation matrices
+plot_covmat <- function(covmat, fig_title = "Covariance Matrix", graph_on = T){
+  covmat[upper.tri(covmat)] <- NA
+  df_plot <- covmat %>% tbl_df()
+  these_levels <- colnames(df_plot)
+  df_plot$ItemX <- colnames(df_plot)
+  gathercols <- colnames(df_plot)[-ncol(df_plot)]
+  df_plot <- df_plot %>% gather_("ItemY", "Value", gathercols)
+  df_plot$ItemX <- factor(df_plot$ItemX, levels = these_levels)
+  df_plot$ItemY <- factor(df_plot$ItemY, levels = these_levels)
+  
+  #midpoint <- min(covmat) + (max(covmat) - min(covmat)) / 2
+  midpoint <- 0
+  gg <- ggplot(df_plot, aes((ItemX), (ItemY)))
+  gg <- gg + geom_tile(aes(fill = Value))#, width = 4, height = 4)
+  gg <- gg + geom_text(aes(label = round(Value, 2)), size = 3.3)
+  if(!is.null(fig_title)){
+    gg <- gg + labs(title = fig_title)
+  }
+  gg <- gg + theme_bw()
+  gg <- gg + theme(axis.text.x = element_text(size = 11, angle = 60, hjust = 1),
+                   axis.text.y = element_text(size = 11),
+                   axis.title = element_blank(),
+                   legend.title = element_blank(),
+                   plot.title = element_text(face = "bold", size = 8))
+  gg <- gg + scale_fill_gradient2(low = "khaki", mid = "cyan", high = "magenta", midpoint, na.value = "white")
+  if(graph_on){print(gg)}
+  return(gg)
+  
+}
+
+df_datcormat <- df_fbal_kcal[, -1]
+df_datcormat[df_datcormat == 0] <- 1
+df_ldatcormat <- log(df_datcormat)
+cormat <- cor(df_ldatcormat)
+plot_covmat(cormat, fig_title = "Correlation Matrix")
+PerformanceAnalytics::chart.Correlation(log(df_datcormat), histogram=TRUE, pch=19)
+#============================================================================
 #============================================================================
 rm(df_raw_fbal_1, df_raw_fbal_2, df_raw_fbal, df_other, df_kcalTot,
    df_fbal_kcal, df_fbal_kcalShare, df_fbal_kcalTot, df_plot); gc()
@@ -284,49 +327,198 @@ rm(df_raw_pop); gc()
 #============================================================================
 #============================================================================
 # Employment indicators
-df_raw_labor <- read.csv("FAO Data/Employment_Indicators_E_All_Data.csv", stringsAsFactors = F)
-rm_cols <- c("Area.Code", "Source.Code", "Indicator.Code", "FAO.Source")
-rm_cols <- which(colnames(df_raw_labor) %in% rm_cols)
-df_raw_labor <- df_raw_labor[, -rm_cols]
-#unique(df_raw_labor$Item)
-df_raw_labor$Indicator <- as.character(df_raw_labor$Indicator)
-df_raw_labor$Area <- as.character(df_raw_labor$Area)
-u <- colnames(df_raw_labor)
-df_raw_labor <- df_raw_labor[, -grep("F", u)]
-u <- colnames(df_raw_labor)
-df_raw_labor <- df_raw_labor[, -grep("N", u)]
-v <- colnames(df_raw_labor)[4:ncol(df_raw_labor)]
-colnames(df_raw_labor)[4:ncol(df_raw_labor)] <- gsub("Y", "", v)
+# df_raw_labor <- read.csv("FAO Data/Employment_Indicators_E_All_Data.csv", stringsAsFactors = F)
+# rm_cols <- c("Area.Code", "Source.Code", "Indicator.Code", "FAO.Source")
+# rm_cols <- which(colnames(df_raw_labor) %in% rm_cols)
+# df_raw_labor <- df_raw_labor[, -rm_cols]
+# #unique(df_raw_labor$Item)
+# df_raw_labor$Indicator <- as.character(df_raw_labor$Indicator)
+# df_raw_labor$Area <- as.character(df_raw_labor$Area)
+# u <- colnames(df_raw_labor)
+# df_raw_labor <- df_raw_labor[, -grep("F", u)]
+# u <- colnames(df_raw_labor)
+# df_raw_labor <- df_raw_labor[, -grep("N", u)]
+# v <- colnames(df_raw_labor)[4:ncol(df_raw_labor)]
+# colnames(df_raw_labor)[4:ncol(df_raw_labor)] <- gsub("Y", "", v)
+# #---------------------------------------------------------------------------
+# # Check available years
+# #colnames(df_raw_labor)
+# #---------------------------------------------------------------------------
+# available_yrs <- as.character(c(1947:2019))
+# df_raw_labor <- gather_(df_raw_labor, "Year", "Value", gather_cols = available_yrs)
+# #df_raw_labor$Unit <- NULL
+# #---------------------------------------------------------------------------
+# #unique(df_raw_labor$Indicator)
+# this_year <- 2018
+# indicator_vec <- c("Labour force participation rate, rural areas",
+#                    #"Employment-to-population ratio, rural areas",
+#                    #"Share of employees in agriculture (% of total employees)",
+#                    #"Share of employment in agriculture (% of total employment)",
+#                    "Employment in agriculture")
+#                    #"Agriculture value added per worker (US$, 2010 prices)")
+# df_labor <- subset(df_raw_labor, Indicator %in% indicator_vec &
+#                      Year == this_year)
+# df_labor$Unit <- NULL
+# df_labor$Year <- NULL
+# df_labor <- df_labor %>% spread(Indicator, Value)
+# u <- df_labor$`Labour force participation rate, rural areas`
+# unique(df_labor$Area[which(!is.na(u))])
+# # Not enough observations -- none in Africa
+# #============================================================================
+# rm(df_raw_labor); gc()
+#============================================================================
+#============================================================================
+#============================================================================
+# Get DFA
+df_raw_dfa <- read.csv("FAO Data/Development_Assistance_to_Agriculture_E_All_Data.csv", stringsAsFactors = F)
+rm_cols <- c("Donor.Code", "Recipient.Country.Code",
+             "Item.Code", "Element.Code", "Purpose.Code")
+rm_cols <- which(colnames(df_raw_dfa) %in% rm_cols)
+df_raw_dfa <- df_raw_dfa[, -rm_cols]
+#unique(df_raw_dfa$Item)
+df_raw_dfa$Item <- as.character(df_raw_dfa$Item)
+df_raw_dfa$Area <- as.character(df_raw_dfa$Area)
+u <- colnames(df_raw_dfa)
+df_raw_dfa <- df_raw_dfa[, -grep("F", u)]
+u <- colnames(df_raw_dfa)
+df_raw_dfa <- df_raw_dfa[, -grep("N", u)]
+v <- colnames(df_raw_dfa)[7:ncol(df_raw_dfa)]
+colnames(df_raw_dfa)[7:ncol(df_raw_dfa)] <- gsub("Y", "", v)
 #---------------------------------------------------------------------------
 # Check available years
-#colnames(df_raw_labor)
+#colnames(df_raw_dfa)
 #---------------------------------------------------------------------------
-available_yrs <- as.character(c(1947:2019))
-df_raw_labor <- gather_(df_raw_labor, "Year", "Value", gather_cols = available_yrs)
-#df_raw_labor$Unit <- NULL
+available_yrs <- as.character(c(1973:2018))
+df_raw_dfa <- gather_(df_raw_dfa, "Year", "Value", gather_cols = available_yrs)
+#df_raw_dfa$Unit <- NULL
 #---------------------------------------------------------------------------
-#unique(df_raw_labor$Indicator)
+#unique(df_raw_dfa$Item)
+#unique(df_raw_dfa$Element)
+#unique(df_raw_dfa$Donor)
 this_year <- 2018
-indicator_vec <- c("Labour force participation rate, rural areas",
-                   #"Employment-to-population ratio, rural areas",
-                   #"Share of employees in agriculture (% of total employees)",
-                   #"Share of employment in agriculture (% of total employment)",
-                   "Employment in agriculture")
-                   #"Agriculture value added per worker (US$, 2010 prices)")
-df_labor <- subset(df_raw_labor, Indicator %in% indicator_vec &
-                     Year == this_year)
-df_labor$Unit <- NULL
-df_labor$Year <- NULL
-df_labor <- df_labor %>% spread(Indicator, Value)
-u <- df_labor$`Labour force participation rate, rural areas`
-unique(df_labor$Area[which(!is.na(u))])
-# Not enough observations -- none in Africa
+this_item <- "Commitment ODA"
+this_purpose <- "Agriculture"
+this_element <- "Value US$"
+this_donor <- "Bilateral Donors"
+df_dfa <- subset(df_raw_dfa, Item == this_item &
+                     Year == this_year &
+                   Purpose == this_purpose &
+                   Element == this_element & Donor == this_donor)
+df_dfa <- df_dfa[, c("Recipient.Country", "Value")]
+df_dfa <- df_dfa[which(!is.na(df_dfa$Value)), ]
+colnames(df_dfa) <- c("Area", paste("ODA Commitment\nAgriculture (millions USD)", this_year))
 #============================================================================
-rm(df_raw_labor); gc()
+rm(df_raw_dfa); gc()
 #============================================================================
 #============================================================================
 #============================================================================
-#======================================================================
+# Get trade indicators
+df_raw_trade <- read.csv("FAO Data/Trade_Indices_E_All_Data.csv", stringsAsFactors = F)
+rm_cols <- c("Area.Code", "Item.Code", "Element.Code")
+rm_cols <- which(colnames(df_raw_trade) %in% rm_cols)
+df_raw_trade <- df_raw_trade[, -rm_cols]
+#unique(df_raw_trade$Item)
+df_raw_trade$Item <- as.character(df_raw_trade$Item)
+df_raw_trade$Area <- as.character(df_raw_trade$Area)
+u <- colnames(df_raw_trade)
+df_raw_trade <- df_raw_trade[, -grep("F", u)]
+v <- colnames(df_raw_trade)[5:ncol(df_raw_trade)]
+colnames(df_raw_trade)[5:ncol(df_raw_trade)] <- gsub("Y", "", v)
+#---------------------------------------------------------------------------
+# Check available years
+#colnames(df_raw_trade)
+#---------------------------------------------------------------------------
+available_yrs <- as.character(c(1961:2017))
+df_raw_trade <- gather_(df_raw_trade, "Year", "Value", gather_cols = available_yrs)
+#unique(df_raw_trade$Element)
+#df_raw_trade$Unit <- NULL
+#---------------------------------------------------------------------------
+#unique(df_raw_trade$Item)
+#unique(df_raw_trade$Element)
+this_year <- 2017
+this_item <- "Agricult.Products, Total"
+element_vec <- c("Import Unit/Value Index (2004-2006 = 100)",
+                 "Export Unit/Value Index (2004-2006 = 100)")
+df_trade <- subset(df_raw_trade, Element %in% element_vec &
+                   Year == this_year &
+                     Item == this_item)
+df_trade <- df_trade[, c("Area", "Element", "Value")]
+df_trade <- df_trade %>% spread(Element, Value)
+df_trade <- df_trade[which(!is.na(df_trade$`Export Unit/Value Index (2004-2006 = 100)`)), ]
+df_trade <- df_trade[which(!is.na(df_trade$`Import Unit/Value Index (2004-2006 = 100)`)), ]
+#============================================================================
+rm(df_raw_trade); gc()
+#============================================================================
+#============================================================================
+#============================================================================
+# Get trade indicators
+df_raw_landUse <- read.csv("FAO Data/Inputs_LandUse_E_All_Data.csv", stringsAsFactors = F)
+rm_cols <- c("Area.Code", "Item.Code", "Element.Code")
+rm_cols <- which(colnames(df_raw_landUse) %in% rm_cols)
+df_raw_landUse <- df_raw_landUse[, -rm_cols]
+#unique(df_raw_landUse$Item)
+df_raw_landUse$Item <- as.character(df_raw_landUse$Item)
+df_raw_landUse$Area <- as.character(df_raw_landUse$Area)
+u <- colnames(df_raw_landUse)
+df_raw_landUse <- df_raw_landUse[, -grep("F", u)]
+v <- colnames(df_raw_landUse)[5:ncol(df_raw_landUse)]
+colnames(df_raw_landUse)[5:ncol(df_raw_landUse)] <- gsub("Y", "", v)
+#---------------------------------------------------------------------------
+# Check available years
+#colnames(df_raw_landUse)
+#---------------------------------------------------------------------------
+available_yrs <- as.character(c(1961:2017))
+df_raw_landUse <- gather_(df_raw_landUse, "Year", "Value", gather_cols = available_yrs)
+#unique(df_raw_landUse$Element)
+#df_raw_landUse$Unit <- NULL
+#---------------------------------------------------------------------------
+#unique(df_raw_landUse$Item)
+#unique(df_raw_landUse$Element)
+this_year <- 2017
+this_element <- "Area"
+item_vec <- c("Country area",
+              "Cropland",
+              "Agricultural land",
+              "Land under permanent crops",
+              "Forest land")#,
+              # "Cropland area under conservation tillage",
+              # "Cropland area under zero or no tillage",
+              # "Land area actually irrigated")
+df_landUse <- subset(df_raw_landUse, Element == this_element &
+                     Year == this_year &
+                     Item %in% item_vec)
+df_landUse$Element <- NULL
+df_landUse$Unit <- NULL
+df_landUse$Year <- NULL
+df_landUse <- df_landUse %>% spread(Item, Value)
+
+df_landUse$`Agricultural land (share)` <- df_landUse$`Agricultural land` / df_landUse$`Country area`
+df_landUse$`Forest land (share)` <- df_landUse$`Forest land` / df_landUse$`Country area`
+df_landUse$`Land under permanent crops (share)` <- df_landUse$`Land under permanent crops` / df_landUse$`Agricultural land`
+df_landUse$`Agricultural land` <- NULL
+df_landUse$`Country area` <- NULL
+df_landUse$Cropland <- NULL
+df_landUse$`Forest land` <- NULL
+df_landUse$`Land under permanent crops` <- NULL
+#============================================================================
+rm(df_raw_landUse); gc()
+#============================================================================
+#============================================================================
+# END DATA PREP
+#============================================================================
+#============================================================================
+#============================================================================
+#============================================================================
+#============================================================================
+#============================================================================
+#============================================================================
+#============================================================================
+#============================================================================
+#============================================================================
+#============================================================================
+#============================================================================
+#============================================================================
+#============================================================================
 # Define function to calculate variable-signal correlations
 get_S_and_corrXS <- function(mat_X_in){
   # mat_P = eigenvectors of the data correlation matrix
@@ -494,22 +686,35 @@ group_fn <- function(group_info){
 #==========================================================================
 #fbalCols_kcalShare
 #fbalCols_kcal
-these_fbalCols <- fbalCols_kcalShare
+these_fbalCols <- fbalCols_kcal
 this_df_fbal <- df_fbal[, these_fbalCols]
 if(length(grep("share", these_fbalCols)) == 0){
   this_df_fbal$`kcal/capita/day Other` <- NULL
+  this_df_fbal$`kcal/capita/day Total` <- NULL
+  this_df_fbal[this_df_fbal == 0] <- 1
+}else{
+  this_df_fbal$`kcal share Other` <- NULL
+  this_df_fbal[this_df_fbal == 0] <- 0.001
 }
+#this_df_fbal[, -1] <- log(this_df_fbal[, -1])
 #this_df_fbal$`kcal share Other` <- NULL
 #this_df_pPrice <- df_pPrice[, c("Area", "Prod. Price Volatility (CV)")]
 this_df_pPrice <- df_pPrice
+this_df_macro <- df_macro[, c(1, 2, 4, 5)]
 nrow(this_df_fbal)
 nrow(this_df_pPrice)
 nrow(df_foodCPI)
 nrow(df_pop)
-nrow(df_macro)
-list_df <- list(df_foodCPI, this_df_fbal, this_df_pPrice, df_pop, df_macro)
+nrow(this_df_macro)
+nrow(df_dfa)
+nrow(df_trade)
+nrow(df_landUse)
+
+list_df <- list(df_foodCPI, this_df_fbal, this_df_pPrice,
+                df_pop, this_df_macro)
 #list_df <- list(this_df_fbal, df_pop)
 df <- plyr::join_all(list_df)
+df[, -1] <- log(df[, -1])
 #exclude_vec <- c("Iran (Islamic Republic of)", "Indonesia")
 #df <- subset(df, !(Area %in% exclude_vec))
 #----------------------------------------------------------------------------
@@ -517,13 +722,19 @@ df <- plyr::join_all(list_df)
 if(length(grep("share", these_fbalCols)) != 0){
   u <- df$`kcal share Pulses`
 }else{
-  u <- df$`kcal/capita/day Total`
+  u <- df$`kcal/capita/day Pulses`
 }
 df <- df[which(!is.na(u)), ]
 u <- df$`Prod. Price Volatility (CV)`
 df <- df[which(!is.na(u)), ]
 u <- df$`Gross Domestic Product per capita`
 df <- df[which(!is.na(u)), ]
+# u <- df$`Export Unit/Value Index (2004-2006 = 100)`
+# df <- df[which(!is.na(u)), ]
+# u <- df$`Agricultural land (share)`
+# df <- df[which(!is.na(u)), ]
+# u <- df$`Land under permanent crops (share)`
+# df <- df[which(!is.na(u)), ]
 u <- df$`Value Added (Agriculture, Forestry and Fishing)`
 df <- df[which(!is.na(u)), ]
 # u <- df$`Urban/Rural Pop.`
@@ -568,12 +779,15 @@ eig_values <- list_out[[3]]
 mat_P <- list_out[[4]]
 mat_S <- mat_S_all[, 1:n_signals]
 mat_L <- cormat_XS[, 1:n_signals]
-fbal_vec <- colnames(df_fbal)[-1]
+fbal_vec <- colnames(this_df_fbal)[-1]
 pop_vec <- colnames(df_pop[-1])
-macro_vec <- c(colnames(df_macro)[-1], colnames(df_labor)[-1])
-price_vec <- c(colnames(df_pPrice)[-1], colnames(df_foodCPI)[-1])
-list_groups <- list(fbal_vec, pop_vec, macro_vec, price_vec)
-group_names <- c("Staple Demand", "Population", "Macroeconomic\nIndicators", "Staple Price")
+macro_vec <- c(colnames(df_macro)[-1])#, colnames(df_labor)[-1])
+price_vec <- c(colnames(this_df_pPrice)[-1], colnames(df_foodCPI)[-1])
+trade_vec <- colnames(df_trade)[-1]
+landUse_vec <- colnames(df_landUse)[-1]
+list_groups <- list(fbal_vec, pop_vec, macro_vec, price_vec, trade_vec, landUse_vec)
+group_names <- c("Staple Demand", "Population", "Macroeconomic\nIndicators",
+                 "Staple Price", "Trade", "Land Use")
 n_groups <- length(group_names)
 bag_of_colors <- randomcoloR::distinctColorPalette(k = 5 * n_groups)
 group_colors <- sample(bag_of_colors, n_groups)
@@ -647,9 +861,9 @@ plot_corrXS_barchart(mat_Lrot2, group_info, xAxis_title, sigNames = NULL)
 mat_Srot2 <- mat_S2 %*% mat_R2
 #mat_Srot2 <- mat_Srot2[, -ncol(mat_Srot2)]
 if(length(grep("share", these_fbalCols)) == 0){
-  df_mod <- data.frame(y = df$`kcal/capita/day Pulses`, mat_Srot2)
+  df_mod <- data.frame(y = df$`kcal/capita/day Pulses`, mat_S2rot)
 }else{
-  df_mod <- data.frame(y = df$`kcal share Pulses`, mat_Srot2)
+  df_mod <- data.frame(y = df$`kcal share Pulses`, mat_S2rot)
 }
 mod <- lm( y ~., data = df_mod, singular.ok = T)
 summary(mod)
@@ -662,10 +876,15 @@ df_PCA <- df[, -1]
 #df_PCA$`kcal share Fruits/Veg.` <- NULL
 #df_PCA$`kcal share Animal Products` <- NULL
 #df_PCA$`kcal share Other` <- NULL
-mod_pcr <- pls::pcr(`kcal share Pulses` ~., data = df_PCA, scale = TRUE, validation = "CV")
+mod_pcr <- pls::pcr(`kcal/capita/day Pulses` ~., data = df_PCA, scale = TRUE, validation = "CV")
 summary(mod_pcr)
 pls::predplot(mod_pcr)
 pls::coefplot(mod_pcr)  
 #pls::validationplot(mod_pcr)
 #hist(df$`kcal/capita/day Pulses`)
-hist(df$`kcal share Pulses`)
+#hist(df$`kcal share Pulses`)
+
+
+cormat <- cor(df[, -1])
+plot_covmat(cormat, fig_title = "Correlation Matrix")
+PerformanceAnalytics::chart.Correlation(df[, -1], histogram=TRUE, pch=19)
