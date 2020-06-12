@@ -462,7 +462,7 @@ gg <- gg + geom_line(lwd = 1.3)
 gg <- gg + facet_wrap(~ Country, ncol = 5)
 gg <- gg + theme(axis.title.x = element_blank())
 gg
-print(gg)
+#print(gg)
 
 
 ```
