@@ -65,6 +65,24 @@ col_order <- c("Area", "Year", "Item", "Value", "Grand Total", "kcal share")
 df_other <- df_other[, col_order]
 df_fbal <- rbind(df_fbal, df_other)
 colnames(df_fbal)[4] <- "kcal/capita/day"
+# Create pct diff
+df_fbal_diff <- subset(df_fbal[, c("Area", "Year", "Item", "kcal/capita/day")],
+                       Year %in% c(2013, 2017))
+df_fbal_diff <- df_fbal_diff %>% group_by(Area, Item) %>%
+  mutate(`kcal/capita/day pct. chng.` = 100 * diff(`kcal/capita/day`) / `kcal/capita/day`[1]) %>%
+  as.data.frame()
+df_fbal_diff$`kcal/capita/day` <- NULL
+df_fbal_diff <- subset(df_fbal_diff, Year == 2017)
+df_fbal_diff$Year <- NULL
+df_fbal_diff <- df_fbal_diff %>% spread(Item, `kcal/capita/day pct. chng.`)
+
+fn_na_count <- function(x){n_na <- length(which(is.na(x))); return(n_na)}
+fn_inf_count <- function(x){n_inf <- length(which(is.infinite(x))); return(n_inf)}
+check_na <- apply(df_fbal_diff[, -1], 2, fn_na_count)
+check_inf <- apply(df_fbal_diff[, -1], 2, fn_inf_count)
+df_fbal_diff <- df_fbal_diff[which(!is.na(df_fbal_diff$Pulses)), ]
+df_fbal_diff <- df_fbal_diff[which(!is.infinite(df_fbal_diff$Pulses)), ]
+df_fbal_diff <- df_fbal_diff[which(!is.na(df_fbal_diff$Oilcrops)), ]
 #-------------------------------------------------------------------------
 # Visually inspect
 area_vec <- c("Kenya", "Uganda", "Ethiopia", "United Republic of Tanzania")
@@ -94,6 +112,9 @@ gg <- gg + theme(legend.title = element_blank())
 gg
 #-------------------------------------------------------------------------
 df_fbal <- subset(df_fbal, Year == 2017)
+df_fbal <- df_fbal %>% group_by(Area, Item) %>%
+  mutate(`kcal/capita/day pct. diff.` = diff(`kcal/capita/day`) / `kcal/capita/day`)
+  
 df_fbal_kcal <- df_fbal[, c("Area", "Item", "kcal/capita/day")]
 df_fbal_kcalShare <- df_fbal[, c("Area", "Item", "kcal share")]
 df_fbal_kcalTot <- df_fbal[-which(duplicated(df_fbal$`Grand Total`)), c("Area", "Grand Total")]
@@ -144,12 +165,12 @@ plot_covmat <- function(covmat, fig_title = "Covariance Matrix", graph_on = T){
   
 }
 
-df_datcormat <- df_fbal_kcal[, -1]
+df_datcormat <- df_fbal_diff[, -1]
 df_datcormat[df_datcormat == 0] <- 1
 df_ldatcormat <- log(df_datcormat)
-cormat <- cor(df_ldatcormat)
+cormat <- cor(df_datcormat)
 plot_covmat(cormat, fig_title = "Correlation Matrix")
-PerformanceAnalytics::chart.Correlation(log(df_datcormat), histogram=TRUE, pch=19)
+PerformanceAnalytics::chart.Correlation(df_datcormat, histogram=TRUE, pch=19)
 #============================================================================
 #============================================================================
 rm(df_raw_fbal_1, df_raw_fbal_2, df_raw_fbal, df_other, df_kcalTot,
@@ -157,8 +178,7 @@ rm(df_raw_fbal_1, df_raw_fbal_2, df_raw_fbal, df_other, df_kcalTot,
 #============================================================================
 #============================================================================
 #============================================================================
-# Get (~3 yr avg.) producer price for major food groups
-# Get mean yearly change and change volatility too
+# Get producer price for major food groups
 df_raw_pPrice <- read.csv("FAO Data/Prices_E_All_Data.csv", stringsAsFactors = F)
 rm_cols <- c("Area.Code", "Item.Code", "Element.Code", "Months.Code")
 rm_cols <- which(colnames(df_raw_pPrice) %in% rm_cols)
@@ -183,21 +203,24 @@ item_vec <- c("Sugar cane", "Pulses, Total", "Roots and Tubers, Total",
               "Cereals, Total", "Oilcrops, Oil Equivalent",
               "Vegetables Primary", "Meat, Total", "Milk, Total",
               "Fruit excl Melons, Total")
-year_vec <- as.character(c(2014:2018))
 df_pPrice <- subset(df_raw_pPrice, Item %in% item_vec &
-                          Element == "Producer Price Index (2014-2016 = 100)" &
-                      Year %in% year_vec)
+                          Element == "Producer Price Index (2014-2016 = 100)")
 df_pPrice <- df_pPrice[which(!is.na(df_pPrice$Value)), ]
 df_pPrice <- df_pPrice %>% group_by(Area, Item) %>%
   mutate(n_yrs = length(Value)) %>% as.data.frame()
 #unique(df_pPrice$n_yrs)
 # length(unique(df_pPrice$Area[which(df_pPrice$n_yrs > 3)]))
 df_pPrice <- subset(df_pPrice, n_yrs > 3)
+df_pPrice <- subset(df_pPrice, Year > 2012)
 df_pPrice <- df_pPrice %>% group_by(Area) %>%
   mutate(mu_price = mean(Value, na.rm = T),
          sd_price =sd(Value, na.rm = T)) %>%
   as.data.frame()
 df_pPrice$cv_price <- df_pPrice$sd_price / df_pPrice$mu_price
+# df_pPrice <- subset(df_pPrice, Year %in% c(2013, 2017))
+# df_pPrice <- df_pPrice %>% group_by(Area, Item) %>%
+#   mutate(`Prod. Price Pct. Chng.` = diff(Value)) %>%
+#   as.data.frame()
 df_pPrice <- df_pPrice[-which(duplicated(df_pPrice$cv_price)), c("Area", "mu_price", "cv_price")]
 # hist(df_pPrice$cv_price)
 # hist(df_pPrice$mu_price)
@@ -285,21 +308,34 @@ df_raw_macro <- gather_(df_raw_macro, "Year", "Value", gather_cols = available_y
 #df_raw_macro$Unit <- NULL
 #---------------------------------------------------------------------------
 #unique(df_raw_macro$Item)
-year_vec <- as.character(c(2015:2018))
+#year_vec <- as.character(c(2015:2018))
+year_vec <- as.character(c(2014, 2018))
 item_vec <- c("Gross Domestic Product per capita",
-              "Gross Fixed Capital Formation",
+              #"Gross Fixed Capital Formation",
               "Value Added (Agriculture, Forestry and Fishing)",
-              "Value Added (Manufacture of food and beverages)",
+              #"Value Added (Manufacture of food and beverages)",
               #"Value Added (Agriculture)",
               "Value Added (Total Manufacturing)")
+this_element <- "Value US$, 2015 prices"
 df_macro <- subset(df_raw_macro, Item %in% item_vec &
-                       Year %in% year_vec)
-df_macro<- df_macro %>% group_by(Area, Item) %>%
-  summarise(Value = mean(Value, na.rm = T))
-df_macro <- df_macro %>% spread(Item, Value)
-u <- df_macro$`Value Added (Manufacture of food and beverages)`
-# df_macro$Area[which(!is.na(u))]
-df_macro <- df_macro[which(!is.na(u)), ]
+                       Year %in% year_vec &
+                     Element == this_element)
+# df_macro<- df_macro %>% group_by(Area, Item) %>%
+#   summarise(Value = mean(Value, na.rm = T))
+df_macro <- df_macro %>% group_by(Area, Element, Item) %>%
+  mutate(`Value Pct. Chng.` = 100 * diff(Value) / Value[1]) %>%
+  as.data.frame()
+df_macro <- subset(df_macro, Year == 2018)
+df_macro$Year <- NULL
+df_macro$Element <- NULL
+df_macro$Value <- NULL
+df_macro$Unit <- NULL
+#df_macro <- df_macro %>% spread(Item, Value)
+df_macro <- df_macro %>% spread(Item, `Value Pct. Chng.`)
+apply(df_macro, 2, fn_na_count)
+apply(df_macro, 2, fn_inf_count)
+df_macro <- df_macro[which(!is.na(df_macro$`Gross Domestic Product per capita`)), ]
+df_macro <- df_macro[which(!is.na(df_macro$`Value Added (Agriculture, Forestry and Fishing)`)), ]
 #============================================================================
 rm(df_raw_macro); gc()
 #============================================================================
@@ -313,14 +349,20 @@ df_raw_pop <- df_raw_pop[, keep_cols]
 # Check available years
 #unique(df_raw_pop$Year)
 #---------------------------------------------------------------------------
-this_year <- 2018
-df_pop <- subset(df_raw_pop, Year == this_year)
-df_pop$Year <- NULL
-df_pop$Unit <- NULL
+these_years <- c(2014, 2018)
+df_pop <- subset(df_raw_pop, Year %in% these_years)
 df_pop <- df_pop %>% spread(Element, Value)
 df_pop$`Urban/Rural Pop.` <- df_pop$`Urban population` / df_pop$`Rural population`
-colnames(df_pop)[3] <- "Tot. Pop. ('000)"
-df_pop <- df_pop[, c("Area", "Tot. Pop. ('000)", "Urban/Rural Pop.")]
+df_pop <- df_pop %>% group_by(Area) %>%
+  mutate(`Pop. Pct. Chng` = 100 * diff(`Total Population - Both sexes`) / `Total Population - Both sexes`[1],
+         `Urban/Rural Pop. Change` = diff(`Urban/Rural Pop.`)) %>%
+  as.data.frame()
+df_pop <- subset(df_pop, Year == 2018)
+df_pop <- df_pop[, c("Area", "Urban/Rural Pop.", "Urban/Rural Pop. Change", "Pop. Pct. Chng")]
+#colnames(df_pop)
+apply(df_pop, 2, fn_na_count)
+apply(df_pop, 2, fn_inf_count)
+df_pop <- df_pop[which(!is.na(df_pop$`Urban/Rural Pop. Change`)), ]
 #============================================================================
 rm(df_raw_pop); gc()
 #============================================================================
@@ -435,23 +477,30 @@ df_raw_trade <- gather_(df_raw_trade, "Year", "Value", gather_cols = available_y
 #---------------------------------------------------------------------------
 #unique(df_raw_trade$Item)
 #unique(df_raw_trade$Element)
-this_year <- 2017
+these_years <- c("2013", "2017")
 this_item <- "Agricult.Products, Total"
 element_vec <- c("Import Unit/Value Index (2004-2006 = 100)",
                  "Export Unit/Value Index (2004-2006 = 100)")
 df_trade <- subset(df_raw_trade, Element %in% element_vec &
-                   Year == this_year &
+                   Year %in% these_years &
                      Item == this_item)
-df_trade <- df_trade[, c("Area", "Element", "Value")]
-df_trade <- df_trade %>% spread(Element, Value)
-df_trade <- df_trade[which(!is.na(df_trade$`Export Unit/Value Index (2004-2006 = 100)`)), ]
-df_trade <- df_trade[which(!is.na(df_trade$`Import Unit/Value Index (2004-2006 = 100)`)), ]
+df_trade$Unit <- NULL
+df_trade <- df_trade %>% group_by(Area, Element) %>%
+  mutate(`Value Change` = diff(Value)) %>%
+  as.data.frame()
+df_trade <- subset(df_trade, Year == 2017)
+df_trade$Year <- NULL
+df_trade <- df_trade[, c("Area", "Element", "Value Change")]
+df_trade <- df_trade %>% spread(Element, `Value Change`)
+colnames(df_trade)[2:3] <- c("Export Index Change", "Import Index Change")
+df_trade <- df_trade[which(!is.na(df_trade$`Export Index Change`)), ]
+df_trade <- df_trade[which(!is.na(df_trade$`Import Index Change`)), ]
 #============================================================================
 rm(df_raw_trade); gc()
 #============================================================================
 #============================================================================
 #============================================================================
-# Get trade indicators
+# Get land use indicators
 df_raw_landUse <- read.csv("FAO Data/Inputs_LandUse_E_All_Data.csv", stringsAsFactors = F)
 rm_cols <- c("Area.Code", "Item.Code", "Element.Code")
 rm_cols <- which(colnames(df_raw_landUse) %in% rm_cols)
@@ -474,7 +523,7 @@ df_raw_landUse <- gather_(df_raw_landUse, "Year", "Value", gather_cols = availab
 #---------------------------------------------------------------------------
 #unique(df_raw_landUse$Item)
 #unique(df_raw_landUse$Element)
-this_year <- 2017
+these_years <- c(2013, 2017)
 this_element <- "Area"
 item_vec <- c("Country area",
               "Cropland",
@@ -485,11 +534,11 @@ item_vec <- c("Country area",
               # "Cropland area under zero or no tillage",
               # "Land area actually irrigated")
 df_landUse <- subset(df_raw_landUse, Element == this_element &
-                     Year == this_year &
+                     Year %in% these_years &
                      Item %in% item_vec)
 df_landUse$Element <- NULL
 df_landUse$Unit <- NULL
-df_landUse$Year <- NULL
+#df_landUse$Year <- NULL
 df_landUse <- df_landUse %>% spread(Item, Value)
 
 df_landUse$`Agricultural land (share)` <- df_landUse$`Agricultural land` / df_landUse$`Country area`
@@ -500,6 +549,8 @@ df_landUse$`Country area` <- NULL
 df_landUse$Cropland <- NULL
 df_landUse$`Forest land` <- NULL
 df_landUse$`Land under permanent crops` <- NULL
+df_landUse <- subset(df_landUse, Year == 2017)
+df_landUse$Year <- NULL
 #============================================================================
 rm(df_raw_landUse); gc()
 #============================================================================
@@ -687,62 +738,48 @@ group_fn <- function(group_info){
 #fbalCols_kcalShare
 #fbalCols_kcal
 these_fbalCols <- fbalCols_kcal
-this_df_fbal <- df_fbal[, these_fbalCols]
-if(length(grep("share", these_fbalCols)) == 0){
-  this_df_fbal$`kcal/capita/day Other` <- NULL
-  this_df_fbal$`kcal/capita/day Total` <- NULL
-  this_df_fbal[this_df_fbal == 0] <- 1
-}else{
-  this_df_fbal$`kcal share Other` <- NULL
-  this_df_fbal[this_df_fbal == 0] <- 0.001
-}
+# this_df_fbal <- df_fbal[, these_fbalCols]
+this_df_fbal <- df_fbal_diff
+# if(length(grep("share", these_fbalCols)) == 0){
+#   this_df_fbal$`kcal/capita/day Other` <- NULL
+#   this_df_fbal$`kcal/capita/day Total` <- NULL
+#   this_df_fbal[this_df_fbal == 0] <- 1
+# }else{
+#   this_df_fbal$`kcal share Other` <- NULL
+#   this_df_fbal[this_df_fbal == 0] <- 0.001
+# }
 #this_df_fbal[, -1] <- log(this_df_fbal[, -1])
 #this_df_fbal$`kcal share Other` <- NULL
 #this_df_pPrice <- df_pPrice[, c("Area", "Prod. Price Volatility (CV)")]
 this_df_pPrice <- df_pPrice
-this_df_macro <- df_macro[, c(1, 2, 4, 5)]
+this_df_macro <- df_macro
 nrow(this_df_fbal)
 nrow(this_df_pPrice)
 nrow(df_foodCPI)
 nrow(df_pop)
 nrow(this_df_macro)
-nrow(df_dfa)
+#nrow(df_dfa)
 nrow(df_trade)
 nrow(df_landUse)
 
 list_df <- list(df_foodCPI, this_df_fbal, this_df_pPrice,
-                df_pop, this_df_macro)
+                df_pop, this_df_macro, df_trade, df_landUse)
 #list_df <- list(this_df_fbal, df_pop)
 df <- plyr::join_all(list_df)
-df[, -1] <- log(df[, -1])
+#df[, -1] <- log(df[, -1])
 #exclude_vec <- c("Iran (Islamic Republic of)", "Indonesia")
 #df <- subset(df, !(Area %in% exclude_vec))
 #----------------------------------------------------------------------------
 # Remove NA
-if(length(grep("share", these_fbalCols)) != 0){
-  u <- df$`kcal share Pulses`
-}else{
-  u <- df$`kcal/capita/day Pulses`
-}
-df <- df[which(!is.na(u)), ]
-u <- df$`Prod. Price Volatility (CV)`
-df <- df[which(!is.na(u)), ]
-u <- df$`Gross Domestic Product per capita`
-df <- df[which(!is.na(u)), ]
-# u <- df$`Export Unit/Value Index (2004-2006 = 100)`
-# df <- df[which(!is.na(u)), ]
-# u <- df$`Agricultural land (share)`
-# df <- df[which(!is.na(u)), ]
-# u <- df$`Land under permanent crops (share)`
-# df <- df[which(!is.na(u)), ]
-u <- df$`Value Added (Agriculture, Forestry and Fishing)`
-df <- df[which(!is.na(u)), ]
-# u <- df$`Urban/Rural Pop.`
-# df <- df[which(!is.infinite(u)), ]
-# u <- df$`Urban/Rural Pop.`
-# df <- df[which(!is.na(u)), ]
-# u <- df$`kcal/capita/day Oilcrops`
-# df <- df[which(!is.na(u)), ]
+apply(df, 2, fn_na_count)
+df <- df[which(!is.na(df$`Prod. Price Volatility (CV)`)), ]
+df <- df[which(!is.na(df$Pulses)), ]
+df <- df[which(!is.na(df$`Land under permanent crops (share)`)), ]
+df <- df[which(!is.na(df$`Forest land (share)`)), ]
+df <- df[which(!is.na(df$`Export Index Change`)), ]
+apply(df, 2, fn_inf_count)
+venezuela_str <- df$Area[grep("Venezuela", df$Area)]
+df <- subset(df, Area != venezuela_str)
 #----------------------------------------------------------------------------
 mat_X_in <- as.matrix(df[, -1])
 row.names(mat_X_in) <- df$Area
@@ -806,11 +843,11 @@ mat_R <- matrix(as.numeric(mat_R),
 xAxis_title <- "Varimax Rotated Correlation"
 plot_corrXS_barchart(mat_Lrot, group_info, xAxis_title, sigNames = NULL)
 #------------------------------------------------------------------------
-if(length(grep("share", these_fbalCols)) == 0){
-  rm_col <- which(colnames(mat_X_in) == "kcal/capita/day Pulses")
-}else{
-  rm_col <- which(colnames(mat_X_in) == "kcal share Pulses")
-}
+# if(length(grep("share", these_fbalCols)) == 0){
+#   rm_col <- which(colnames(mat_X_in) == "kcal/capita/day Pulses")
+# }else{
+#   rm_col <- which(colnames(mat_X_in) == "kcal share Pulses")
+# }
 mat_X_in2 <- mat_X_in[, -rm_col]
 list_out <- get_S_and_corrXS(mat_X_in2)
 mat_S_all2 <- list_out[[1]]
@@ -876,7 +913,7 @@ df_PCA <- df[, -1]
 #df_PCA$`kcal share Fruits/Veg.` <- NULL
 #df_PCA$`kcal share Animal Products` <- NULL
 #df_PCA$`kcal share Other` <- NULL
-mod_pcr <- pls::pcr(`kcal/capita/day Pulses` ~., data = df_PCA, scale = TRUE, validation = "CV")
+mod_pcr <- pls::pcr(Pulses ~., data = df_PCA, scale = TRUE, validation = "CV")
 summary(mod_pcr)
 pls::predplot(mod_pcr)
 pls::coefplot(mod_pcr)  
