@@ -1,10 +1,10 @@
 ---
 title: "PABRA Bean Corridor IMPACT Analysis 2020-2050 (Draft)"
-author: "Ben Schiek"
+author: "Ben Schiek, Camila Bonilla"
 date:  "`r Sys.Date()`"
 bibliography: PABRA Bean Corridor IMPACT Analysis.bib
 numbersections: true
-output: pdf_document
+output: word_document
 ---
 
 \tableofcontents
@@ -15,6 +15,28 @@ knitr::opts_chunk$set(echo = FALSE,
                       warning = FALSE)
 library(tidyverse)
 #library(patchwork)
+#===========================================================================
+shift_legend2 <- function(p) {
+  # ...
+  # to grob
+  gp <- ggplotGrob(p)
+  facet.panels <- grep("^panel", gp[["layout"]][["name"]])
+  empty.facet.panels <- sapply(facet.panels, function(i) "zeroGrob" %in% class(gp[["grobs"]][[i]]))
+  empty.facet.panels <- facet.panels[empty.facet.panels]
+  
+  # establish name of empty panels
+  empty.facet.panels <- gp[["layout"]][empty.facet.panels, ]
+  names <- empty.facet.panels$name
+  # example of names:
+  #[1] "panel-3-2" "panel-3-3"
+  
+  # now we just need a simple call to reposition the legend
+  #lemon::reposition_legend(p, 'center', panel=names)
+  p_out <- lemon::reposition_legend(p, 'center', panel=names)
+  #class(lemon::reposition_legend(p, 'center', panel=names))
+  return(p_out)
+}
+#===========================================================================
 setwd("E:/BSCHIEK")
 rawData_folder <- ("E:/BSCHIEK/IMPACT3-Model-ver3.3/OutputFiles/Aggregation/")
 rawData_filename <- "AVISA_0_sub.csv"
@@ -37,16 +59,15 @@ demandVar_vec <- c("QDXAgg -- Total Demand",
 supplyVar_vec <- c("QSupXAgg -- Commodity Supply",
                    "PerCapKCalCXAgg -- PcKcal by Commodity",
                    "PerCapKCalXAgg",
-                   "PopulationAtRiskXagg - Pop at Risk of Hunger"
+                   "PopulationAtRiskXagg - Pop at Risk of Hunger",
+                   "QMXAgg -- Import",
+                   "QSXAgg -- Total Production"
 )
 
-yieldAreaProd_vec <- c("TYldXAgg -- Total Yield",
-                       "TAreaXAgg -- Total Area",
-                       "QSXAgg -- Total Production")
+yieldArea_vec <- c("TYldXAgg -- Total Yield",
+                       "TAreaXAgg -- Total Area")
 
-trade_vec <- c("QEXAgg -- Export",
-               "QMXAgg -- Import",
-               "QNXAgg -- Net Trade",
+trade_vec <- c("QNXAgg -- Net Trade",
                "QNSH1XAgg -- Net Trade Share of Production",
                "QESHXAgg -- Export Share of Production"
 )
@@ -58,11 +79,13 @@ prices_vec <- c("PCXAgg -- Consumer Prices",
                 "PEXAgg -- Export Prices",
                 "PNETXAgg -- Net Prices"
 )
+assump_vec <- c("pcGDPXAgg -- Per Capita Income", "PopXAgg -- Population",
+                "YldInt2XAgg -- IPRs")
 #=========================================================================
 ECABREN_vec <- c("SSA-Kenya", "SSA-Tanzania", "SSA-Uganda", "SSA-Ethiopia",
                  "SSA-Congo", "SSA-Burundi", "SSA-Zambia", "SSA-Rwanda",
                  "SSA-Madagascar", "SSA-Sudan", "SSA-DRC")
-SABRN_vec <- c("SSA-Zambia", "SSA-Mozambique", "SSA-Botswana",
+SABRN_vec <- c("SSA-Zambia", "SSA-Mozambique", "SSA-Botswana", "SSA-Malawi",
                "SSA-South Africa", "SSA-Tanzania", "SSA-Zimbabwe", "SSA-Angola")
 WECABREN_vec <- c("SSA-Burkina Faso", "SSA-Central African Rep.",
                   "SSA-Cameroon", "SSA-Congo", "SSA-Ghana",
@@ -70,9 +93,9 @@ WECABREN_vec <- c("SSA-Burkina Faso", "SSA-Central African Rep.",
                   "SSA-Sierra Leon", "SSA-Togo")
 these_countries <- c(ECABREN_vec, SABRN_vec, WECABREN_vec)
 #-------------------------------------------------------------------------
-# df_raw <- read.csv(rawData_filepath, stringsAsFactors = F)
-# df_raw$X <- NULL
-# #unique(df_raw$region[grep("SSA", df_raw$region, ignore.case = T)])
+#df_raw <- read.csv(rawData_filepath, stringsAsFactors = F)
+#df_raw$X <- NULL
+#unique(df_raw$region[grep("SSA", df_raw$region, ignore.case = T)])
 # 
 # df <- subset(df_raw, region %in% these_countries &
 #                scenario != "NoCC" &
@@ -125,8 +148,6 @@ df_shockCC_mean <- df_shockCC_mean[, c("Scenario", "Commodity", "Country", "Syst
 df_shockCC <- rbind(df_shockCC, df_shockCC_mean)
 colnames(df_shockCC)[ncol(df_shockCC)] <- "CC yield shock"
 #---------------------------------------------------------------------------
-assump_vec <- c("pcGDPXAgg -- Per Capita Income", "PopXAgg -- Population",
-                "YldInt2XAgg -- IPRs")
 df <- subset(df, !(impactparameter %in% assump_vec))
 # unique(df$impactparameter)
 # colnames(df)
@@ -135,90 +156,11 @@ df <- df %>% group_by(Year, System, Country, Commodity, impactparameter) %>% sum
 # unique(df$Commodity)
 ```
 
-# Assumed exogenous bean yield growth rate
-
-In its calculation of yield, IMPACT includes an assumed baseline level of yield growth year after year, stemming from research, improved management, and other factors. In the model documentation, this exogenous yield growth rate is referred to as the "intrinsic productivity rate". From the IMPACT documentation:
-
-"[T]he model assumes a scenario of underlying improvements in yields over time that, to varying degrees, continue trends observed during the past 50 to 60 years in an informed extrapolation following the concepts introduced in Evenson and Rosegrant (1995) and Evenson et al. (1999). These long-run trends, or intrinsic productivity growth rates, are intended to reflect the expected increases in inputs, improved seeds, and improvements in management practices. These trends differ and generally are higher for developing countries, where there is considerable scope to narrow the gap in yields compared to developed countries. These intrinsic productivity growth rates are exogenous to the model, and changes in them are specified as part of the definition of different scenarios. We assume that these underlying trends vary by crop and region and that they will decline somewhat during the next 50 years as the pace of technological improvements in developed countries slows and as developing countries catch up to yields in developed countries" [@robinson2015international].
-
-The referenced articles are
-
-Evenson, R. and M. W. Rosegrant. 1995. "Productivity Projections for Commodity Market Modeling." In final workshop of the international cooperative research project on Projections and Policy Implications of Medium and Long-Term Rice Supply and Demand, Beijing.Beijing, China, April 23-26, 1995.
-
-Evenson, R. E., C. Pray, and M. W. Rosegrant. 1999. Agricultural Research and Productivity Growth in India. IFPRI Research Report No. 109. Washington, DC: International Food Policy Research Institute.
-
-Citations of the 1995 document turn up on Google Scholar; but the document itself does not appear to be readily available. However, the 1999 article can be found here: https://cas.cgiar.org/sites/default/files/pdf/250.pdf
-
-```{r, fig.show='hold', fig.width=6, fig.height=6, fig.align='left', echo=FALSE}
-
-shift_legend2 <- function(p) {
-  # ...
-  # to grob
-  gp <- ggplotGrob(p)
-  facet.panels <- grep("^panel", gp[["layout"]][["name"]])
-  empty.facet.panels <- sapply(facet.panels, function(i) "zeroGrob" %in% class(gp[["grobs"]][[i]]))
-  empty.facet.panels <- facet.panels[empty.facet.panels]
-  
-  # establish name of empty panels
-  empty.facet.panels <- gp[["layout"]][empty.facet.panels, ]
-  names <- empty.facet.panels$name
-  # example of names:
-  #[1] "panel-3-2" "panel-3-3"
-  
-  # now we just need a simple call to reposition the legend
-  #lemon::reposition_legend(p, 'center', panel=names)
-  p_out <- lemon::reposition_legend(p, 'center', panel=names)
-  #class(lemon::reposition_legend(p, 'center', panel=names))
-  return(p_out)
-}
-#===========================================================================
-for(i in 1:n_countryLists){
-  this_country_vec <- list_country_vec[[i]]
-  this_group <- country_group_names[i]
-  #n_countries <- length(this_country_vec)
-  this_title <- this_group
-  df_plot <- subset(df_IPR, Country %in% this_country_vec &
-                      Commodity == "Beans")
-  n_countries <- length(unique(df_plot$Country))
-  colnames(df_plot)[ncol(df_plot)] <- "Exogenous Bean Yield Growth Rate"
-  gg <- ggplot(df_plot, aes(x = Year, y = `Exogenous Bean Yield Growth Rate`,
-                            group = System, color = System))
-  gg <- gg + geom_line(lwd = 1.5)
-  if(n_countries > 4){
-    gg <- gg + facet_wrap(~Country, ncol = 3)
-  }else{
-    gg <- gg + facet_wrap(~Country, ncol = 2)
-  }
-  gg <- gg + ggtitle(this_title)
-  gg <- gg + theme(axis.title.x = element_blank())
-  gg
-  
-  if(n_countries %% 2 != 0 | n_countries == 10){
-    gg <- shift_legend2(gg)
-    gg <- ggplotify::as.ggplot(gg)
-    gg
-  }else{
-    gg <- gg + theme(legend.position = "bottom")
-    gg
-    print(gg)
-  }
-  #class(gg)
-  
-}
-
-```
-
-\pagebreak
-
 # Supply and demand
-
-* Bean demand projected to outpace supply.
-* Should I also generate a facet grid of demand/supply ratios for substitute commodities (animal meats, other pulses)?
-
-## Demand to supply ratio
-
+<!-- ## Household demand to supply ratio -->
+<!-- Supply = production + imports -->
+## Household demand as share of total demand
 ```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
-
 # n <- length(unique(df$Country))
 # bag_of_colors <- randomcoloR::distinctColorPalette(k = n)
 # country_colors <- sample(bag_of_colors, n)
@@ -227,35 +169,47 @@ for(i in 1:n_countryLists){
 #unique(df$impactparameter)
 df_demand <- subset(df, impactparameter %in% c(demandVar_vec, supplyVar_vec))
 #unique(df_demand$impactparameter)
-df_demand <- subset(df_demand, impactparameter != "QFXAgg -- Household Demand")
+df_rurUrbDemand <- subset(df_demand, impactparameter == "QHDXAgg -- Household Demand")
+df_demand <- subset(df_demand, impactparameter != "QHDXAgg -- Household Demand")
 u <- df_demand$impactparameter
 df_demand$impactparameter <- gsub("^.*\\-- ", "", u)
 #============================================================================
+# df_plot <- subset(df_demand, impactparameter %in% c("Import",
+#                                                      "Total Production",
+#                        "Household Demand") &
+#                      Commodity == "Beans")
 df_plot <- subset(df_demand, impactparameter %in%
-                    c("Commodity Supply",
-                      "Total Demand"))
+                    c("Total Demand", "Household Demand") &
+                    Commodity == "Beans")
 df_plot <- df_plot %>% spread(impactparameter, Val)
-df_plot$`Bean Demand / Supply` <- df_plot$`Total Demand` / df_plot$`Commodity Supply`
-#unique(df_plot$Commodity)
-#colnames(df_plot)
-# for(i in 1:n_countryLists){
-#   this_country_vec <- list_country_vec[[i]]
-#   this_df_plot <- subset(df_plot, Country %in% this_country_vec &
-#                           Commodity == "Beans")
-#   this_title <- country_group_names[i]
-this_df_plot <- subset(df_plot, Commodity == "Beans")
-gg <- ggplot(this_df_plot, aes(x = Year, y = `Bean Demand / Supply`))
+df_plot$`HH demand as share of total demand` <- df_plot$`Household Demand` / df_plot$`Total Demand`
+gg <- ggplot(df_plot, aes(x = Year, y = `HH demand as share of total demand`))
 gg <- gg + geom_line(lwd = 1.4)
 gg <- gg + facet_wrap(~Country, ncol = 5)
 gg <- gg + theme(axis.title.x = element_blank(),
-                 legend.position = "bottom",
-                 legend.title = element_blank())
-print(gg)
+                  legend.position = "bottom",
+                  legend.title = element_blank())
+gg
+``` 
 
-# }
+\pagebreak 
 
+## Urban and rural household demand
+
+```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
+
+df_plot <- subset(df_rurUrbDemand, Commodity == "Beans")
+df_plot$System[grep("rural", df_plot$System, ignore.case = T)] <- "Rural"
+colnames(df_plot)[2] <- "HH Demand Type"
+colnames(df_plot)[ncol(df_plot)] <- "'000 metric tons"
+gg <- ggplot(df_plot, aes(x = Year, y = `'000 metric tons`, fill = `HH Demand Type`))
+gg <- gg + geom_area(position = "stack")
+gg <- gg + scale_fill_brewer(palette = "Dark2")
+gg <- gg + facet_wrap(~Country, ncol = 5, scales = "free_y")
+gg <- gg + theme(axis.title.x = element_blank(),
+                 legend.position = "bottom")
+gg
 ```
-\pagebreak
 
 ## Trade as share of demand and production
 
@@ -397,11 +351,62 @@ gg
 ```
 \pagebreak
 
-# References {-}
-
-<div id="refs"></div>
-
 # Appendix: Assumptions regarding climate change, population, and GDP growth {-}
+
+## Assumed exogenous bean yield growth rate {-}
+
+In its calculation of yield, IMPACT includes an assumed baseline level of yield growth year after year, stemming from research, improved management, and other factors. In the model documentation, this exogenous yield growth rate is referred to as the "intrinsic productivity rate". From the IMPACT documentation:
+
+"[T]he model assumes a scenario of underlying improvements in yields over time that, to varying degrees, continue trends observed during the past 50 to 60 years in an informed extrapolation following the concepts introduced in Evenson and Rosegrant (1995) and Evenson et al. (1999). These long-run trends, or intrinsic productivity growth rates, are intended to reflect the expected increases in inputs, improved seeds, and improvements in management practices. These trends differ and generally are higher for developing countries, where there is considerable scope to narrow the gap in yields compared to developed countries. These intrinsic productivity growth rates are exogenous to the model, and changes in them are specified as part of the definition of different scenarios. We assume that these underlying trends vary by crop and region and that they will decline somewhat during the next 50 years as the pace of technological improvements in developed countries slows and as developing countries catch up to yields in developed countries" [@robinson2015international].
+
+The referenced articles are
+
+Evenson, R. and M. W. Rosegrant. 1995. "Productivity Projections for Commodity Market Modeling." In final workshop of the international cooperative research project on Projections and Policy Implications of Medium and Long-Term Rice Supply and Demand, Beijing.Beijing, China, April 23-26, 1995.
+
+Evenson, R. E., C. Pray, and M. W. Rosegrant. 1999. Agricultural Research and Productivity Growth in India. IFPRI Research Report No. 109. Washington, DC: International Food Policy Research Institute.
+
+Citations of the 1995 document turn up on Google Scholar; but the document itself does not appear to be readily available. However, the 1999 article can be found here: https://cas.cgiar.org/sites/default/files/pdf/250.pdf
+
+```{r, fig.show='hold', fig.width=6, fig.height=6, fig.align='left', echo=FALSE}
+
+for(i in 1:n_countryLists){
+  this_country_vec <- list_country_vec[[i]]
+  this_group <- country_group_names[i]
+  #n_countries <- length(this_country_vec)
+  this_title <- this_group
+  df_plot <- subset(df_IPR, Country %in% this_country_vec &
+                      Commodity == "Beans")
+  n_countries <- length(unique(df_plot$Country))
+  colnames(df_plot)[ncol(df_plot)] <- "Exogenous Bean Yield Growth Rate"
+  gg <- ggplot(df_plot, aes(x = Year, y = `Exogenous Bean Yield Growth Rate`,
+                            group = System, color = System))
+  gg <- gg + geom_line(lwd = 1.5)
+  if(n_countries > 4){
+    gg <- gg + facet_wrap(~Country, ncol = 3)
+  }else{
+    gg <- gg + facet_wrap(~Country, ncol = 2)
+  }
+  gg <- gg + ggtitle(this_title)
+  gg <- gg + theme(axis.title.x = element_blank())
+  gg
+  
+  if(n_countries %% 2 != 0 | n_countries == 10){
+    gg <- shift_legend2(gg)
+    gg <- ggplotify::as.ggplot(gg)
+    gg
+  }else{
+    gg <- gg + theme(legend.position = "bottom")
+    gg
+    print(gg)
+  }
+  #class(gg)
+  
+}
+
+```
+
+\pagebreak
+
 
 ## Assumed climate change bean yield shocks by country and climate model {-}
 
@@ -466,3 +471,9 @@ gg
 
 
 ```
+
+\pagebreak
+
+# References {-}
+
+<!-- <div id="refs"></div> -->
