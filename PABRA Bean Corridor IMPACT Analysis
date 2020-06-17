@@ -4,7 +4,9 @@ author: "Ben Schiek, Camila Bonilla"
 date:  "`r Sys.Date()`"
 bibliography: PABRA Bean Corridor IMPACT Analysis.bib
 numbersections: true
-output: word_document
+output:
+  word_document:
+    toc: true
 ---
 
 \tableofcontents
@@ -65,7 +67,7 @@ supplyVar_vec <- c("QSupXAgg -- Commodity Supply",
 )
 
 yieldArea_vec <- c("TYldXAgg -- Total Yield",
-                       "TAreaXAgg -- Total Area")
+                   "TAreaXAgg -- Total Area")
 
 trade_vec <- c("QNXAgg -- Net Trade",
                "QNSH1XAgg -- Net Trade Share of Production",
@@ -159,7 +161,20 @@ df <- df %>% group_by(Year, System, Country, Commodity, impactparameter) %>% sum
 # Supply and demand
 <!-- ## Household demand to supply ratio -->
 <!-- Supply = production + imports -->
-## Household demand as share of total demand
+## General demand profile
+
+Demand categories:
+
+* Household food demand, rural and urban: "[Household] demand is a function of the price of the commodity and the prices of other competing commodities, per capita income, and total population.... The IMPACT demand elasticities are originally based on United States Department of 
+Agriculture–estimated elasticities and adjusted to represent a synthesis of average, aggregate elasticities for each region, given the income level and distribution of urban and rural population (United States Department of Agriculture 1998). Over time the elasticities are adjusted to accommodate the gradual shift in demand from staples to high-value commodities like meat, especially in developing countries. This assumption is based on expected economic growth, increased urbanization, and continued commercialization of the agricultural sector. IMPACT is designed to simulate multiple types of households (that is, rural, urban, rich, poor, and so forth); however, currently, IMPACT treats household demand with one representative consumer per country" [@robinson2015international].
+
+* Export demand
+
+* Livestock feed demand: "Feed demand is a derived intermediate demand. It is determined by two components: (1) animal feed requirements determined by livestock production and livestock feed requirements and (2) price effects that take into account potential substitution possibilities among different feeds. The equation also incorporates a technology parameter that indicates improvements in feeding efficiencies over time" [@robinson2015international].
+  + "Intermediate demand is a derived demand that is based on the demand for final processed goods, such as food oils and sugar. The input-output matrix determines the proportions of inputs required for each producing activity" [@robinson2015international].
+
+* Other demand: "Other demand summarizes all other demands for agricultural products from sectors outside of the focus of IMPACT ( for example, seeds, industrial use)" [@robinson2015international].
+
 ```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
 # n <- length(unique(df$Country))
 # bag_of_colors <- randomcoloR::distinctColorPalette(k = n)
@@ -167,95 +182,162 @@ df <- df %>% group_by(Year, System, Country, Commodity, impactparameter) %>% sum
 # df_color <- data.frame(Country = unique(df$Country), Color = country_colors)
 
 #unique(df$impactparameter)
-df_demand <- subset(df, impactparameter %in% c(demandVar_vec, supplyVar_vec))
+#df_demand <- subset(df, impactparameter %in% c(demandVar_vec, supplyVar_vec))
 #unique(df_demand$impactparameter)
-df_rurUrbDemand <- subset(df_demand, impactparameter == "QHDXAgg -- Household Demand")
-df_demand <- subset(df_demand, impactparameter != "QHDXAgg -- Household Demand")
+these_params <- c("QHDXAgg -- Household Demand",
+                  "QEXAgg -- Export",
+                  "QLXAgg -- Livestock Feed Demand",
+                  "QINTXAgg -- Intermediate Demand",
+                  "QOTHRXAgg -- Other Demand")
+df_demand <- subset(df, impactparameter %in% these_params &
+                      Commodity == "Beans")
 u <- df_demand$impactparameter
 df_demand$impactparameter <- gsub("^.*\\-- ", "", u)
-#============================================================================
-# df_plot <- subset(df_demand, impactparameter %in% c("Import",
-#                                                      "Total Production",
-#                        "Household Demand") &
-#                      Commodity == "Beans")
-df_plot <- subset(df_demand, impactparameter %in%
-                    c("Total Demand", "Household Demand") &
-                    Commodity == "Beans")
-df_plot <- df_plot %>% spread(impactparameter, Val)
-df_plot$`HH demand as share of total demand` <- df_plot$`Household Demand` / df_plot$`Total Demand`
-gg <- ggplot(df_plot, aes(x = Year, y = `HH demand as share of total demand`))
-gg <- gg + geom_line(lwd = 1.4)
-gg <- gg + facet_wrap(~Country, ncol = 5)
-gg <- gg + theme(axis.title.x = element_blank(),
-                  legend.position = "bottom",
-                  legend.title = element_blank())
-gg
-``` 
+df_demand$impactparameter[grep("rural", df_demand$System, ignore.case = T)] <- "Rural HH Demand"
+df_demand$impactparameter[grep("Urban", df_demand$System, ignore.case = T)] <- "Urban HH Demand"
+df_demand$System <- NULL
+colnames(df_demand)[ncol(df_demand)] <- "'000 metric tons"
+colnames(df_demand)[4] <- "Demand Type"
 
-\pagebreak 
-
-## Urban and rural household demand
-
-```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
-
-df_plot <- subset(df_rurUrbDemand, Commodity == "Beans")
-df_plot$System[grep("rural", df_plot$System, ignore.case = T)] <- "Rural"
-colnames(df_plot)[2] <- "HH Demand Type"
-colnames(df_plot)[ncol(df_plot)] <- "'000 metric tons"
-gg <- ggplot(df_plot, aes(x = Year, y = `'000 metric tons`, fill = `HH Demand Type`))
+df_plot <- df_demand
+gg <- ggplot(df_plot, aes(x = Year, y = `'000 metric tons`, fill = `Demand Type`))
 gg <- gg + geom_area(position = "stack")
 gg <- gg + scale_fill_brewer(palette = "Dark2")
 gg <- gg + facet_wrap(~Country, ncol = 5, scales = "free_y")
 gg <- gg + theme(axis.title.x = element_blank(),
+                 axis.text.x = element_text(angle = 60, hjust = 1),
                  legend.position = "bottom")
 gg
-```
 
-## Trade as share of demand and production
+``` 
 
-* Many countries depend heavily on imports to meet most of their bean demand.
+\pagebreak 
+
+## Protein diet demand profile
 
 ```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
 
-#unique(df_demand$impactparameter)
-these_vars <- c("Net Trade Share of Demand")
-df_plot <- subset(df_demand, impactparameter %in% these_vars &
+df_kcal <- subset(df, impactparameter == "PerCapKCalCXAgg -- PcKcal by Commodity")
+colnames(df_kcal)[ncol(df_kcal)] <- "kcal/capita/day"
+
+protein_vec <- c("Lentils", "Cowpeas", "Chickpeas", "Beans", "Pigeonpeas",
+                 "Other Pulses", "Poultry", "Beef", "Eggs", "Lamb", "Dairy",
+                 "Groundnut", "Groundnut meal")
+df_kcal <- subset(df_kcal, Commodity %in% protein_vec)
+
+n <- length(unique(df_kcal$Commodity))
+bag_of_colors <- randomcoloR::distinctColorPalette(k = n)
+commod_colors <- sample(bag_of_colors, n)
+
+df_plot <- df_kcal
+gg <- ggplot(df_plot, aes(x = Year, y = `kcal/capita/day`, fill = Commodity))
+gg <- gg + geom_area(position = "stack")
+gg <- gg + scale_fill_manual(values = commod_colors)
+gg <- gg + facet_wrap(~ Country, ncol = 5, scales = "free_y")
+gg <- gg + theme(axis.title.x = element_blank(),
+                 axis.text.x = element_text(angle = 60, hjust = 1),
+                 legend.title = element_blank(),
+                 legend.direction = "horizontal")
+gg <- gg + guides(color = guide_legend(nrow = 2))
+gg <- shift_legend2(gg)
+gg <- ggplotify::as.ggplot(gg)
+gg
+
+```
+\pagebreak 
+
+## Domestic supply profile (cropland use)
+
+"A new feature of IMPACT 3 is the implementation of a land market to manage competing demands for agricultural land from different crops, as well as providing new linkage points to land-use models that work with broader land-use changes, such as conversion of forest to grasslands and agricultural land. It also allows us to separate total area supply (irrigated and rainfed) from individual crop area demands and allows equilibrium conditions to determine the best economic use of the available land. The total supply of land is assumed to be a function of the scarcity value or shadow price index of land, which can also be considered a summary of changes in crop prices. The shadow price (WF) is indexed to 1 in the first year and changes based on changing demands from all crops for land area.... The supply of land is considered exogenous within each year, meaning that farmers are not allowed to adjust the total crop area in the middle of the year. The total land supply over time is driven by exogenous trends on the availability of area for agriculture as well as endogenous responses to changes in area demand, which is handled in between years....
+
+"Crop area is specified as an area demand function with respect to changes in the marginal revenue product, changes in land cost, and exogenous nonprice trends in harvested area. Crop area elasticities simulate the supply response to changes in the marginal revenue of land represented by [a function of] the interaction of the net price of an activity and the productivity of the activity in using an additional hectare of land.
+
+"[The function includes an] exogenous trend...[that] captures changes in area resulting from factors other than direct market effects, such as government programs encouraging cropping expansion, contraction due to soil degradation, or conversion of land from agriculture to nonagricultural uses. Assumptions for exogenous trends are determined by a combination of historical changes in land use and expert judgment on potential future regional dynamics. They are represented as compound growth from the base and are applied between years. Competing demands from different crops are handled through an equilibrium equation that determines the land allocation and ensures that all crop area demand sums up to the total land supply for each [geographical unit]" [@robinson2015international].
+
+```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
+
+#unique(df$Commodity)
+pulses_vec <- c("Lentils", "Cowpeas", "Chickpeas", "Beans",
+                "Groundnut", "Pigeonpeas", "Other Pulses")
+cereals_vec <- c("Millet", "Maize", "Other Cereals", "Rice",
+                 "Barley", "Sorghum", "Wheat")
+RnT_vec <- c("Potato", "Cassava", "Sweet Potato", "Yam", "Other Roots")
+oilcrops_vec <- c("Palm Fruit", "Soybean", "Rapeseed", "Sunflower", "Other Oilseeds")
+these_crops <- c(pulses_vec, cereals_vec, RnT_vec, oilcrops_vec)
+df_plot <- subset(df, impactparameter == "TAreaXAgg -- Total Area" &
+                    Commodity %in% these_crops)
+#unique(df_plot$System)
+u <- df_plot$Commodity
+df_plot$Commodity[which(u %in% cereals_vec)] <- "Cereals"
+df_plot$Commodity[which(u %in% RnT_vec)] <- "Roots & Tubers"
+df_plot$Commodity[which(u %in% oilcrops_vec)] <- "Oilcrops"
+df_plot <- df_plot %>% group_by(Country, Year, Commodity) %>%
+  summarise(Val = sum(Val, na.rm = T))
+colnames(df_plot)[ncol(df_plot)] <- "'000 hectares"
+
+df_plot <- subset(df_plot, Commodity != "Cereals")
+  
+n <- length(unique(df_plot$Commodity))
+bag_of_colors <- randomcoloR::distinctColorPalette(k = n)
+commod_colors <- sample(bag_of_colors, n)
+
+gg <- ggplot(df_plot, aes(x = Year, y = `'000 hectares`, fill = Commodity))
+gg <- gg + geom_area(position = "stack")
+gg <- gg + scale_fill_manual(values = commod_colors)
+gg <- gg + facet_wrap(~ Country, ncol = 5, scales = "free_y")
+gg <- gg + theme(axis.title.x = element_blank(),
+                 axis.text.x = element_text(angle = 60, hjust = 1),
+                 legend.title = element_blank(),
+                 legend.direction = "horizontal")
+gg <- gg + guides(color = guide_legend(nrow = 2))
+gg <- shift_legend2(gg)
+gg <- ggplotify::as.ggplot(gg)
+gg
+
+
+
+```
+\pagebreak
+
+## Trade as share of demand and production
+
+Negative values indicate import dependence to meet domestic bean demand. Positive values indicate bean exports as a share of production.
+
+```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
+
+#unique(df$impactparameter)
+these_vars <- c("QESHXAgg -- Export Share of Production",
+                "QMSHXAgg -- Import Share of Demand")
+df_plot <- subset(df, impactparameter %in% these_vars &
                     Commodity == "Beans")
-#unique(df_plot$impactparameter)
-#unique(df_plot$Commodity)
-#colnames(df_plot)
-#colnames(df_plot)[5] <- "Demand Category"
-colnames(df_plot)[ncol(df_plot)] <- "Net trade share of demand" #"'000 metric tons"
-
-# for(i in 1:n_countryLists){
-#   this_country_vec <- list_country_vec[[i]]
-#   this_df_plot <- subset(df_plot, Country %in% this_country_vec)
-#   n_countries <- length(unique(this_df_plot$Country))
-#   this_title <- country_group_names[i]
-this_df_plot <- df_plot
-gg <- ggplot(this_df_plot, aes(x = Year, y = `Net trade share of demand`))
-gg <- gg + geom_area(position = "stack", fill = "green", alpha = 0.4)
+u <- df_plot$impactparameter
+df_plot$impactparameter <- gsub("^.*\\-- ", "", u)
+df_plot$Val[grep("Import", df_plot$impactparameter, ignore.case = T)] <- -df_plot$Val[grep("Import", df_plot$impactparameter, ignore.case = T)]
+these_colors <- c("green", "violet")
+colnames(df_plot)[ncol(df_plot)] <- "Share"
+gg <- ggplot(df_plot, aes(x = Year, y = Share, fill = impactparameter))
+gg <- gg + geom_area(position = "stack", alpha = 0.4)
+gg <- gg + scale_fill_manual(values = these_colors)
 gg <- gg + facet_wrap(~ Country, ncol = 5)
-# if(n_countries > 4){
-#     gg <- gg + facet_wrap(~ Country, ncol = 3)
-# }else{
-#     gg <- gg + facet_wrap(~ Country, ncol = 2)
-# }
-# gg <- gg + ggtitle(this_title)
-gg <- gg + theme(axis.title.x = element_blank())
-print(gg)
-
-# }
+gg <- gg + theme(axis.title.x = element_blank(),
+                 axis.text.x = element_text(angle = 60, hjust = 1),
+                 legend.title = element_blank(),
+                 legend.position = "bottom")
+gg
 
 ```
 \pagebreak
 
 # Prices
 
-* The gap between producer and consumer price varies considerably across countries.
+* Beef prices (not included in this graphic) are generally much higher than bean prices.
+
+* Poultry prices are competitive with bean prices, and increasingly so as time goes on.
+
+* The gap between bean producer and consumer price varies considerably across countries.
 
 ```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
-beans_and_substitutes <- c("Beans", "Poultry", "Beef")
+beans_and_substitutes <- c("Beans", "Poultry")
 df_price <- subset(df, impactparameter %in% prices_vec &
                      Commodity %in% beans_and_substitutes)
 u <- df_price$impactparameter
@@ -266,73 +348,29 @@ df_price$impactparameter <- gsub("Prices", "Price", u)
 df_price$commod_price <- paste(df_price$Commodity, df_price$impactparameter)
 colnames(df_price)[(ncol(df_price) - 1)] <- "2005 USD per metric ton"
 
-
-# for(i in 1:n_countryLists){
-#   this_country_vec <- list_country_vec[[i]]
-#   df_plot <- subset(df_price, Country %in% this_country_vec)
-#   n_countries <- length(unique(df_plot$Country))
-#   this_title <- country_group_names[i]
 df_plot <- df_price
-  gg <- ggplot(df_plot, aes(x = Year, y = `2005 USD per metric ton`, group = commod_price, color = commod_price))
-  gg <- gg + geom_line(lwd = 1.4)
-  gg <- gg + facet_wrap(~ Country, ncol = 5)
-  gg <- gg + theme(axis.title.x = element_blank(),
-                   legend.title = element_blank(),
-                   legend.position = "bottom")
-  
-    print(gg)
-
+gg <- ggplot(df_plot, aes(x = Year, y = `2005 USD per metric ton`, group = commod_price, color = commod_price))
+gg <- gg + geom_line(lwd = 1.4)
+gg <- gg + facet_wrap(~ Country, ncol = 5)
+gg <- gg + theme(axis.title.x = element_blank(),
+                 axis.text.x = element_text(angle = 60, hjust = 1),
+                 legend.title = element_blank(),
+                 legend.box = "horizontal")
+gg <- gg + guides(color = guide_legend(nrow = 2))
+gg <- shift_legend2(gg)
+gg <- ggplotify::as.ggplot(gg)
+gg
 
 ```
 \pagebreak
 
-# Dietary evolution
+# Food security
 
-## Protein diet profile
+"The share at risk [of hunger] is the percentage of the total population that is at risk of suffering from undernourishment. This calculation is based on a strong empirical correlation between the share of undernourished within the total population and the relative availability of food and is adapted from the work done by Fischer et al. in the IIASA World Food System used by IIASA and FAO (Fischer et al. 2005)" [@robinson2015international].
 
-```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
+The cited reference is
 
-df_kcal <- subset(df, impactparameter == "PerCapKCalCXAgg -- PcKcal by Commodity")
-colnames(df_kcal)[ncol(df_kcal)] <- "kcal/capita/day"
-
-protein_vec <- c("Lentils", "Cowpeas", "Chickpeas", "Beans",
-                 "Poultry", "Beef", "Eggs", "Lamb", "Dairy", "Groundnut",
-                 "Groundnut meal")
-df_kcal <- subset(df_kcal, Commodity %in% protein_vec)
-
-n <- length(unique(df_kcal$Commodity))
-bag_of_colors <- randomcoloR::distinctColorPalette(k = n)
-commod_colors <- sample(bag_of_colors, n)
-
-# for(i in 1:n_countryLists){
-#   this_country_vec <- list_country_vec[[i]]
-#   df_plot <- subset(df_kcal, Country %in% this_country_vec)
-#   n_countries <- length(unique(df_plot$Country))
-#   this_title <- country_group_names[i]
-df_plot <- df_kcal
-gg <- ggplot(df_plot, aes(x = Year, y = `kcal/capita/day`, fill = Commodity))
-gg <- gg + geom_area(position = "stack")
-gg <- gg + scale_fill_manual(values = commod_colors)
-gg <- gg + facet_wrap(~ Country, ncol = 5)
-#   if(n_countries > 4){
-#       gg <- gg + facet_wrap(~ Country, ncol = 3)
-#   }else{
-#       gg <- gg + facet_wrap(~ Country, ncol = 2)
-#   }
-# gg <- gg + ggtitle(this_title)
-gg <- gg + theme(axis.title.x = element_blank(),
-                 legend.title = element_blank(),
-                 legend.position = "bottom")
-
-print(gg)
-
-
-# }
-
-
-```
-
-## Food security
+Fischer, G., M. Shah, F. N. Tubiello, and H. van Velhuizen. 2005. “Socio-economic and Climate Change Impacts on Agriculture: An Integrated Assessment.” Philosophical Transactions of the Royal Society B 360:2067–2083. http://rstb.royalsocietypublishing.org/content/360/1463/2067.full
 
 ```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
 df_plot <- subset(df, impactparameter == "PopulationAtRiskXagg - Pop at Risk of Hunger")
@@ -344,6 +382,7 @@ gg <- ggplot(df_plot, aes(x = Year, y = `Percentage of population`, fill = impac
 gg <- gg + geom_area(position = "stack", alpha = 0.4, color = "violet")
 gg <- gg + facet_wrap(~Country, ncol = 5)
 gg <- gg + theme(axis.title.x = element_blank(),
+                 axis.text.x = element_text(angle = 60, hjust = 1),
                  legend.position = "none")
 gg <- gg + ggtitle("Pop. at risk of hunger")
 gg
@@ -351,7 +390,13 @@ gg
 ```
 \pagebreak
 
-# Appendix: Assumptions regarding climate change, population, and GDP growth {-}
+# References {-}
+
+<div id="refs"></div>
+
+\pagebreak
+
+# Appendix: Assumptions regarding yield growth, climate change, population, and GDP growth {-}
 
 ## Assumed exogenous bean yield growth rate {-}
 
@@ -369,74 +414,48 @@ Citations of the 1995 document turn up on Google Scholar; but the document itsel
 
 ```{r, fig.show='hold', fig.width=6, fig.height=6, fig.align='left', echo=FALSE}
 
-for(i in 1:n_countryLists){
-  this_country_vec <- list_country_vec[[i]]
-  this_group <- country_group_names[i]
-  #n_countries <- length(this_country_vec)
-  this_title <- this_group
-  df_plot <- subset(df_IPR, Country %in% this_country_vec &
-                      Commodity == "Beans")
-  n_countries <- length(unique(df_plot$Country))
+  df_plot <- subset(df_IPR, Commodity == "Beans")
   colnames(df_plot)[ncol(df_plot)] <- "Exogenous Bean Yield Growth Rate"
   gg <- ggplot(df_plot, aes(x = Year, y = `Exogenous Bean Yield Growth Rate`,
                             group = System, color = System))
-  gg <- gg + geom_line(lwd = 1.5)
-  if(n_countries > 4){
-    gg <- gg + facet_wrap(~Country, ncol = 3)
-  }else{
-    gg <- gg + facet_wrap(~Country, ncol = 2)
-  }
-  gg <- gg + ggtitle(this_title)
-  gg <- gg + theme(axis.title.x = element_blank())
+  gg <- gg + geom_line(lwd = 1.3)
+  gg <- gg + facet_wrap(~Country, ncol = 5)
+  gg <- gg + theme(axis.title.x = element_blank(),
+                   axis.text.x = element_text(angle = 60, hjust = 1),
+                   legend.direction = "horizontal")
+  gg <- shift_legend2(gg)
+  gg <- ggplotify::as.ggplot(gg)
   gg
-  
-  if(n_countries %% 2 != 0 | n_countries == 10){
-    gg <- shift_legend2(gg)
-    gg <- ggplotify::as.ggplot(gg)
-    gg
-  }else{
-    gg <- gg + theme(legend.position = "bottom")
-    gg
-    print(gg)
-  }
-  #class(gg)
-  
-}
 
 ```
 
 \pagebreak
 
+## Assumed climate change bean yield shock {-}
 
-## Assumed climate change bean yield shocks by country and climate model {-}
+Climate change (CC) bean rainfed yield shock according to five Global Circulation Models (GCMs): NORE, MIRO, IPSL, HGEM, GFDL. The demand, supply, price, and food security graphics in this report are based on the average across GCMs.
 
 ```{r, fig.show='hold', fig.width=6, fig.height=6, fig.align='left', echo=FALSE}
 
-#colnames(df_shockCC)
-# unique(df_shockCC$productiontype)
-# unique(df_shockCC$Commodity)
-for(i in 1:length(list_country_vec)){
-  this_country_vec <- list_country_vec[[i]]
-  this_title <- country_group_names[i]
+# unique(df_shockCC$Scenario)
+# unique(df_shockCC$System)
   df_plot <- subset(df_shockCC, Commodity == "Beans" &
-                      Country %in% this_country_vec)
+                      System == "Rainfed")
   colnames(df_plot)[ncol(df_plot)] <- "CC Bean Yield Shock"
   gg <- ggplot(df_plot, aes(x = Year, y = `CC Bean Yield Shock`,
-                            group = System, color = System))
+                            group = Scenario, color = Scenario))
   gg <- gg + geom_line(lwd = 1.3)
-  gg <- gg + facet_grid(Scenario ~ Country)
-  gg <- gg + ggtitle(this_title)
+  gg <- gg + facet_wrap(~Country, ncol = 5)
   gg <- gg + theme(axis.title.x = element_blank(),
-                   legend.position = "bottom")
+                   axis.text.x = element_text(angle = 60, hjust = 1),
+                   legend.direction = "horizontal")
+  gg <- shift_legend2(gg)
+  gg <- ggplotify::as.ggplot(gg)
   gg
-  print(gg)
-  
-}
-
 
 ```
 
-## Assumed population growth and GDP growth by country {-}
+## Assumed population growth {-}
 
 ```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
 
@@ -446,34 +465,29 @@ df_popGDP$impactparameter <- gsub("^.*\\-- ", "", u)
 df_pop <- subset(df_popGDP, impactparameter == "Population")
 colnames(df_pop)[ncol(df_pop)] <- "Population (million)"
 df_GDP <- subset(df_popGDP, impactparameter == "Per Capita Income")
-#unique(df_popGDP$impactparameter)
 colnames(df_GDP)[ncol(df_GDP)] <- "GDP / capita ('000 USD)"
 
 df_plot <- df_pop
 gg <- ggplot(df_plot, aes(x = Year, y = `Population (million)`))
 gg <- gg + geom_line(lwd = 1.3)
 gg <- gg + facet_wrap(~ Country, ncol = 5)
-gg <- gg + theme(axis.title.x = element_blank())
+gg <- gg + theme(axis.title.x = element_blank(),
+                 axis.text.x = element_text(angle = 60, hjust = 1))
 gg
-#print(gg)
 
 ```
 \pagebreak
+
+## Assumed GDP per capita growth {-}
 
 ```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
 df_plot <- df_GDP
 gg <- ggplot(df_plot, aes(x = Year, y = `GDP / capita ('000 USD)`))
 gg <- gg + geom_line(lwd = 1.3)
 gg <- gg + facet_wrap(~ Country, ncol = 5)
-gg <- gg + theme(axis.title.x = element_blank())
+gg <- gg + theme(axis.title.x = element_blank(),
+                 axis.text.x = element_text(angle = 60, hjust = 1))
 gg
-#print(gg)
 
 
 ```
-
-\pagebreak
-
-# References {-}
-
-<!-- <div id="refs"></div> -->
