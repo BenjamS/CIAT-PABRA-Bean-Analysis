@@ -1,0 +1,560 @@
+#setwd("D:/OneDrive - CGIAR/Documents")
+library(tidyverse)
+library(circlize)
+#source('./FAOdat_createRegionGroups.R', echo = F)
+FAOdat_createRegionGroups <- function(df_raw, exclude_these, keep_FAOregions = F,
+                                      df_is_trade_matrix = F,
+                                      consolidate_LAC = T,
+                                      consolidate_WEur = T,
+                                      consolidate_AusNZPacIslands = T,
+                                      consolidate_SSA = T)
+{
+  #=================================
+  #--Africa
+  countries_NAfrica <- as.character(unique(read.csv("Country list - Northern Africa.csv")[,"Area"]))
+  countries_MAfrica <- as.character(unique(read.csv("Country list - Middle Africa.csv")[,"Area"]))
+  countries_WAfrica <- as.character(unique(read.csv("Country list - Western Africa.csv")[,"Area"]))
+  countries_EAfrica <- as.character(unique(read.csv("Country list - Eastern Africa.csv")[,"Area"]))
+  countries_SAfrica <- as.character(unique(read.csv("Country list - Southern Africa.csv")[,"Area"]))
+  #--Americas
+  countries_SAmer <- as.character(unique(read.csv("Country list - South America.csv")[,"Area"]))
+  countries_CAmer <- as.character(unique(read.csv("Country list - Central America.csv")[,"Area"]))
+  countries_Carib <- as.character(unique(read.csv("Country list - Caribbean.csv")[,"Area"]))
+  countries_NAmer <- as.character(unique(read.csv("Country list - Northern America.csv")[,"Country"]))
+  #--Asia
+  countries_EAsia <- as.character(unique(read.csv("Country list - Eastern Asia.csv")[,"Area"]))
+  #countries_EAsia <- countries_EAsia[!(countries_EAsia %in% c("China, Hong Kong SAR", "China, Macao SAR"))]
+  countries_SEAsia <- as.character(unique(read.csv("Country list - South-Eastern Asia.csv")[,"Area"]))
+  countries_SAsia <- as.character(unique(read.csv("Country list - Southern Asia.csv")[,"Area"]))
+  countries_WAsia <- as.character(unique(read.csv("Country list - Western Asia.csv")[,"Area"]))
+  countries_CAsia <- as.character(unique(read.csv("Country list - Central Asia.csv")[,"Area"]))
+  #--Europe
+  countries_NEurope <- as.character(unique(read.csv("Country list - Northern Europe.csv")[,"Area"]))
+  countries_WEurope <- as.character(unique(read.csv("Country list - Western Europe.csv")[,"Area"]))
+  countries_EEurope <- as.character(unique(read.csv("Country list - Eastern Europe.csv")[,"Area"]))
+  countries_SEurope <- as.character(unique(read.csv("Country list - Southern Europe.csv")[,"Area"]))
+  #--Oceania
+  countries_Oceania <- as.character(unique(read.csv("Country list - Oceania.csv")[,"Area"]))
+  countries_AusNZea <- c("Australia", "New Zealand")
+  countries_PacifIs <- setdiff(countries_Oceania, countries_AusNZea)
+  #=================================
+  #--Create region groupings
+  if(df_is_trade_matrix){
+    u <- df_raw$Partner.Countries
+  }else{
+    u <- df_raw$Area
+  }
+  df_raw$Region <- NA
+  df_raw$Region[which(u %in% countries_NAmer)] <- "North America"
+  df_raw$Region[which(u %in% countries_SAmer)] <- "South America"
+  df_raw$Region[which(u %in% countries_CAmer)] <- "Central America"
+  df_raw$Region[which(u %in% countries_Carib)] <- "Caribbean"
+  df_raw$Region[which(u %in% countries_NAfrica)] <- "Northern Africa"
+  df_raw$Region[which(u %in% countries_SAfrica)] <- "Southern Africa"
+  df_raw$Region[which(u %in% countries_WAfrica)] <- "Western Africa"
+  df_raw$Region[which(u %in% countries_EAfrica)] <- "Eastern Africa"
+  df_raw$Region[which(u %in% countries_MAfrica)] <- "Middle Africa"
+  df_raw$Region[which(u %in% countries_CAsia)] <- "Central Asia"
+  df_raw$Region[which(u %in% countries_WAsia)] <- "Western Asia"
+  df_raw$Region[which(u %in% countries_SAsia)] <- "Southern Asia"
+  df_raw$Region[which(u %in% countries_EAsia)] <- "Eastern Asia"
+  df_raw$Region[which(u %in% countries_SEAsia)] <- "South-Eastern Asia"
+  df_raw$Region[which(u %in% countries_NEurope)] <- "Northern Europe"
+  df_raw$Region[which(u %in% countries_SEurope)] <- "Southern Europe"
+  df_raw$Region[which(u %in% countries_WEurope)] <- "Western Europe"
+  df_raw$Region[which(u %in% countries_EEurope)] <- "Eastern Europe"
+  df_raw$Region[which(u %in% countries_PacifIs)] <- "Pacific Islands"
+  df_raw$Region[which(u %in% countries_AusNZea)] <- "Australia & New Zealand"
+  rm(u)
+  #--------------------
+  #--See what countries escaped designation
+  #unique(df_raw$Area[which(is.na(df_raw$Region))])
+  #--Assign these to their proper regions
+  #(Leave out "China" as it is already covered under "China, mainlaind", "Hong Kong", etc.)
+  if(df_is_trade_matrix){
+    u <- df_raw$Partner.Countries
+  }else{
+    u <- df_raw$Area
+  }
+  df_raw$Region[which(u %in% c("Åland Islands", "Isle of Man", "Greenland"))] <- "Northern Europe"
+  df_raw$Region[which(u %in% c("Anguilla", "Bermuda", "Cayman Islands", "Curaçao"))] <- "Caribbean"
+  df_raw$Region[which(u %in% c("Côte d'Ivoire"))] <- "Western Africa"
+  df_raw$Region[which(u %in% c("Palau"))] <- "Pacific Islands"
+  df_raw$Region[which(u %in% c("Maldives", "Réunion"))] <- "Southern Asia"
+  df_raw$Region[which(u %in% c("French Guiana"))] <- "South America"
+  rm(u)
+  #===========================
+  #unique(df_raw$Area[which(is.na(df_raw$Region) == T)])
+  if(!(df_is_trade_matrix)){
+    ind_NA <- which(is.na(df_raw$Region) == T)
+    ind_noNA <- which(is.na(df_raw$Region) == F)
+    if(keep_FAOregions == F){
+      df_raw <- df_raw[ind_noNA,]
+    }else{
+      df_raw$Region[ind_NA] <- df_raw$Area[ind_NA] 
+    }
+  }
+  #===========================
+  #--
+  if(df_is_trade_matrix){
+    df_raw <- subset(df_raw, !(Partner.Countries %in% exclude_these))
+  }else{
+    df_raw <- subset(df_raw, !(Area %in% exclude_these))
+  }
+  #--
+  if(consolidate_LAC){
+    LAC <- c("Central America", "Caribbean", "South America")
+    u <- df_raw$Region
+    df_raw$Region[which(u %in% LAC)] <- "LAC"
+    rm(u)
+  }
+  if(consolidate_WEur){
+    Europe_WNS <- c("Southern Europe", "Western Europe", "Northern Europe")
+    u <- df_raw$Region
+    df_raw$Region[which(u %in% Europe_WNS)] <- "W/N/S Europe"
+    rm(u)
+  }
+  if(consolidate_AusNZPacIslands){
+    AusNZPacIslands <- c("Australia & New Zealand", "Pacific Islands")
+    u <- df_raw$Region
+    df_raw$Region[which(u %in% AusNZPacIslands)] <- "Aus/NZ/Oceania"
+    rm(u)
+  }
+  if(consolidate_SSA){
+    SSA <- c("Eastern Africa", "Southern Africa", "Western Africa", "Middle Africa")
+    u <- df_raw$Region
+    df_raw$Region[which(u %in% SSA)] <- "Sub-Saharan Africa"
+    rm(u)
+  }
+  
+  # Europe_E <- "Eastern Europe"
+  # ESE_Asia <- c("South-Eastern Asia", "Eastern Asia")
+  #--
+  # u <- df_raw$Region
+  # df_raw$Region[which(u %in% LAC)] <- "LAC"
+  # df_raw$Region[which(u %in% Europe_E)] <- "E. Europe"
+  # df_raw$Region[which(u %in% ESE_Asia)] <- "E. & S.E. Asia"
+  # rm(u)
+  #--
+  return(df_raw)
+}
+# regionGroups_vec <- paste0("countries_",
+#                            #--Africa
+#                            c("NAfrica", "MAfrica",
+#                              "WAfrica", "EAfrica",
+#                              "SAfrica",
+#                              #--Americas
+#                              "SAmer", "CAmer",
+#                              "Carib", "NAmer",
+#                              #--Asia
+#                              "EAsia",
+#                              "SEAsia", "SAsia",
+#                              "WAsia", "CAsia",
+#                              #--Europe
+#                              "NEurope", "EEurope",
+#                              "WEurope", "SEurope",
+#                              #--Oceania
+#                              "Oceania", "AusNZea",
+#                              "PacifIs"))
+# #=================================
+# countries_NAfrica <- as.character(unique(read.csv("Country list - Northern Africa.csv")[,"Area"]))
+# 
+# ind_load <- which(exists(regionGroups_vec[4]) == F)
+# 
+# "Northern Africa"
+# "Middle Africa"
+# "Western Africa"
+# "Eastern Africa"
+# "Southern Africa"
+# #--Americas
+# "South America"
+# "Central America"
+
+#==========================================================================
+df_raw <- read.csv("FAO Data/FAO Beans Trade Matrix.csv", stringsAsFactors = F)
+df_raw$X <- NULL
+#colnames(df_raw)
+colnames(df_raw)[6:ncol(df_raw)] <- gsub("X", "", colnames(df_raw)[6:ncol(df_raw)])
+gathercols <- colnames(df_raw)[6:ncol(df_raw)]
+df_raw <- df_raw %>% gather_("Year", "Value", gathercols)
+#--------------------------------------------------------------------------
+unique(df_raw$Partner.Countries[grep("Tanzania", df_raw$Partner.Countries)])
+df_raw <- FAOdat_createRegionGroups(df_raw, exclude_these = NULL, keep_FAOregions = F,
+                                    df_is_trade_matrix = T,
+                                    consolidate_LAC = T,
+                                    consolidate_WEur = T,
+                                    consolidate_AusNZPacIslands = T,
+                                    consolidate_SSA = F)
+#unique(df_raw$Region)
+#--------------------------------------------------------------------------
+u <- df_raw$`Reporter.Countries`
+df_raw$`Reporter.Countries`[grep("Tanzania", u)] <- "Tanzania"
+df_raw$`Reporter.Countries`[which(u == "Eswatini")] <- "Swaziland"
+df_raw$`Reporter.Countries`[which(u == "Belgium-Luxembourg")] <- "Belgium"
+u <- df_raw$`Partner.Countries`
+df_raw$`Partner.Countries`[grep("Tanzania", u)] <- "Tanzania"
+df_raw$`Partner.Countries`[which(u == "Eswatini")] <- "Swaziland"
+df_raw$`Partner.Countries`[which(u == "Belgium-Luxembourg")] <- "Belgium"
+
+df_raw$Year <- as.integer(df_raw$Year)
+ts_start_yr <- 2000
+these_exporters <- c("Tanzania", "Ethiopia", "Kenya",
+                     "Uganda",
+                     "Madagascar")
+df <- subset(df_raw, Year >= ts_start_yr &
+             Element == "Export Quantity" &
+               Reporter.Countries %in% these_exporters)
+df$Value[which(is.na(df$Value))] <- 0
+# unique(df$Partner.Countries[which(df$Region == "Eastern Africa")])
+# unique(df$Partner.Countries[which(df$Region == "Middle Africa")])
+# exclude_vec <- c("Seychelles", "Comoros")
+# df <- subset(df, !(Partner.Countries %in% exclude_vec))
+
+
+#unique(df$Region)
+
+df$Partner.Countries[which(df$Region != "Eastern Africa")] <- 
+  df$Region[which(df$Region != "Eastern Africa")]
+
+asia_vec <- c("South-Eastern Asia", "Eastern Asia")
+df$Partner.Countries[which(df$Region %in% asia_vec)] <- "E./S.E. Asia"
+
+#unique(df$Partner.Countries)
+
+df <- df %>% group_by(Reporter.Countries, Year, Partner.Countries) %>%
+  summarise(Value = sum(Value, na.rm = T))
+
+df <- df %>% group_by(Reporter.Countries, Partner.Countries) %>%
+  mutate(meanVal = mean(Value, na.rm = T)) %>%
+  as.data.frame()
+
+df <- df %>% group_by(Reporter.Countries, Partner.Countries) %>%
+  mutate(n_times = length(which(Value > 0))) %>%
+  as.data.frame()
+
+# u1 <- df$meanVal
+# u2 <- df$n_times
+# df$Partner.Countries[which(u1 < 5 | u2 < 10)] <- "Residual/Sporadic"
+# 
+# df <- df %>% group_by(Reporter.Countries, Year, Partner.Countries) %>%
+#   summarise(Value = sum(Value, na.rm = T))
+
+#unique(df$Partner.Countries)
+
+
+df <- df[, c("Reporter.Countries", "Partner.Countries", "Value", "Year")]
+
+df_plot <- subset(df, Year == 2017)
+df_plot <- df_plot[which(df_plot$Value > 0), ]
+df_plot$Partner.Countries[which(df_plot$Value < 5000)] <- "Residual"
+df_plot <- df_plot %>% group_by(Reporter.Countries, Partner.Countries) %>%
+  summarise(Value = sum(Value, na.rm = T))
+
+#hist(log(df_plot$Value))
+unique(df_plot$Partner.Countries)
+length(which(df_plot$Value < 50))
+
+df_plot$Year <- NULL
+#df_plot$Value <- log(df_plot$Value)
+mat_plot <- df_plot %>% spread(Partner.Countries, Value) %>%
+  as.matrix()
+row_names <- mat_plot[, 1]
+mat_plot <- mat_plot[, -1]
+mat_plot[is.na(mat_plot)] <- 0
+mat_plot <- apply(mat_plot, 2, as.numeric)
+row.names(mat_plot) <- row_names
+circos.clear()
+this_trackHeight <- 0.4 * max(strwidth(unlist(dimnames(mat_plot))))
+chordDiagram(df_plot, directional = 1, 
+             direction.type = c("diffHeight", "arrows"),
+             link.arr.type = "big.arrow",
+             link.lwd = 1, link.lty = 1, link.border = "black",
+             annotationTrack = "grid",
+             preAllocateTracks = list(track.height = this_trackHeight)
+             )
+circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
+  xlim = get.cell.meta.data("xlim")
+  ylim = get.cell.meta.data("ylim")
+  sector.name = get.cell.meta.data("sector.index")
+  circos.text(mean(xlim), ylim[1] + .1, sector.name, facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.5))
+  circos.axis(h = "top", labels.cex = 0.5, major.tick.percentage = 0.2, sector.index = sector.name, track.index = 2)
+}, bg.border = NA)
+title(main = list("2017 E. African Bean Trade Flows (FAO data)", cex = 0.8))
+circos.clear()
+#===========================================================================
+these_exporters <- c("Tanzania", "Ethiopia", "Kenya",
+                     "Uganda", "Zambia", "Malawi", "Cameroon",
+                     "Mozambique", "Madagascar")
+df <- subset(df_raw, Year >= ts_start_yr &
+               Element == "Export Quantity" &
+               Reporter.Countries %in% these_exporters)
+df$Value[which(is.na(df$Value))] <- 0
+# unique(df$Partner.Countries[which(df$Region == "Eastern Africa")])
+# unique(df$Partner.Countries[which(df$Region == "Middle Africa")])
+# exclude_vec <- c("Seychelles", "Comoros")
+# df <- subset(df, !(Partner.Countries %in% exclude_vec))
+
+
+#unique(df$Region)
+
+df$Partner.Countries[which(df$Region != "Eastern Africa")] <- 
+  df$Region[which(df$Region != "Eastern Africa")]
+
+asia_vec <- c("South-Eastern Asia", "Eastern Asia")
+df$Partner.Countries[which(df$Region %in% asia_vec)] <- "E./S.E. Asia"
+
+#unique(df$Partner.Countries)
+
+df <- df %>% group_by(Reporter.Countries, Year, Partner.Countries) %>%
+  summarise(Value = sum(Value, na.rm = T))
+
+df <- df %>% group_by(Reporter.Countries, Partner.Countries) %>%
+  mutate(meanVal = mean(Value, na.rm = T)) %>%
+  as.data.frame()
+
+df <- df %>% group_by(Reporter.Countries, Partner.Countries) %>%
+  mutate(n_times = length(which(Value > 0))) %>%
+  as.data.frame()
+
+u1 <- df$meanVal
+u2 <- df$n_times
+df$Partner.Countries[which(u1 < 1000 | u2 < 8)] <- "Residual/Sporadic"
+
+df <- df %>% group_by(Reporter.Countries, Year, Partner.Countries) %>%
+  summarise(Value = sum(Value, na.rm = T))
+
+df <- df[, c("Reporter.Countries", "Partner.Countries", "Value", "Year")]
+
+df_plot <- df
+
+gg <- ggplot(df_plot, aes(x = Year, y = Value, fill = Partner.Countries))
+gg <- gg + geom_area(position = "stack")
+gg <- gg + facet_wrap(~Reporter.Countries, ncol = 2, scales = "free_y")
+gg
+
+
+
+
+
+df_plot <- subset(df, Element == "Export Quantity" &
+                    Reporter.Countries %in% these_reporterCountries &
+                    Year == 2017)
+df_plot <- df_plot[, c("Reporter.Countries",
+                  "Partner.Countries",
+                  "Value")]
+
+
+
+
+
+chordDiagramFromDataFrame(df_plot, directional = 1, direction.type = c("diffHeight", "arrows"),
+                                    link.arr.col = arr.col, link.arr.length = 0.2)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+df <- as.data.frame(df %>% group_by(Reporter.Countries, Year, Element, Region) %>% 
+                      summarise(Value = sum(Value)))
+
+# df_ethiop <- subset(df, Reporter.Countries == "Ethiopia")
+# unique(df_ethiop$Region)
+
+# df_ethiop <- subset(df, Reporter.Countries == "Ethiopia")
+# unique(df_ethiop$Region)
+# df_ethiop <- df_ethiop %>% spread(Element, Value)
+# length(df_ethiop$Region[df_ethiop$Region == "Australia & New Zealand"])
+# length(df_ethiop$Region[df_ethiop$Region == "Unspecified Area"])
+# df_check <- subset(df, Reporter.Countries == "Kenya")
+# unique(df_check$Region)
+# df_check <- df_check %>% spread(Element, Value)
+# length(df_check$Region[df_check$Region == "Middle East"])
+# length(df_check$Region[df_check$Region == "Unspecified Area"])
+
+#--
+df <- df %>% spread(Element, Value)
+df <- as.data.frame(df %>% group_by(Reporter.Countries, Year) %>% mutate(totval_yr = sum(`Export Value`)))
+df$ValueShare <- df$`Export Value` / df$totval_yr
+df$Region[df$ValueShare < 0.1 | df$`Export Quantity` < 100] <- "Residual"
+df$Region[df$Region == "Unspecified Area"] <- "Residual"
+#df$Partner.Countries <- ifelse(df$`Export Quantity` < 100, "Residual", df$Partner.Countries)
+df <- as.data.frame(df %>% group_by(Reporter.Countries, Region, Year) %>% summarise_all(funs(sum)))
+#--
+df <- as.data.frame(df %>% group_by(Reporter.Countries, Region) %>%
+                      mutate(one_off = ifelse(sum(`Export Quantity` > 0) <= 2, 1, 0)))
+df$Region[df$one_off == 1] <- "Sporadic"
+df$one_off <- NULL
+df <- as.data.frame(df %>% group_by(Reporter.Countries, Year, Region) %>%
+                      summarise_all(funs(sum)))
+#--
+u <- df$Region
+df$Region[grep("Sporadic", u)] <- "Residual/Sporadic"
+df$Region[grep("Residual", u)] <- "Residual/Sporadic"
+df <- as.data.frame(df %>% group_by(Reporter.Countries, Year, Region) %>%
+                      summarise_all(funs(sum)))
+#=========================================================================
+#=========================================================================
+#=========================================================================
+
+
+
+
+
+
+
+
+
+
+
+#=========================================================================
+#=========================================================================
+#=========================================================================
+#=========================================================================
+#=========================================================================
+
+
+#--
+df_look <- df %>% group_by(Reporter.Countries) %>%
+  mutate(mu = mean(`Export Quantity`, na.rm = T))
+df_look <- as.data.frame(df_look)
+df_look <- df_look %>% group_by(Reporter.Countries) %>%
+  mutate(cv = sd(`Export Quantity`, na.rm = T) / mu)
+df_look <- as.data.frame(df_look)
+df_look <- df_look %>% group_by(Reporter.Countries) %>%
+  mutate(n_yrs = length(unique(Year)))
+df_look <- as.data.frame(df_look)
+
+df_look <- df_look[, c("Reporter.Countries", "mu", "cv", "n_yrs")]
+ind_rm <- which(duplicated(df_look$Reporter.Countries))
+df_look <- df_look[-ind_rm, ]
+#--
+#countries_keep <- df_look$Reporter.Countries[which(df_look$mu > 100)]
+countries_keep <- c("Uganda", "Kenya", "Tanzania", "Ethiopia")
+df <- subset(df, Reporter.Countries %in% countries_keep)
+#unique(df$Partner.Countries[which(df$Reporter.Countries == "Kenya")])
+#min(df$Year)
+list_df <- list()
+for(i in 1:length(countries_keep)){
+  this_reporterCountry <- countries_keep[i]
+  this_df <- subset(df, Reporter.Countries == this_reporterCountry)
+  this_df <- this_df[, c(1:5)]
+  gathercols <- colnames(this_df)[4:5]
+  this_df <- this_df %>% gather_("Element", "Value", gathercols)
+  this_df <- this_df %>% spread(Region, Value)
+  these_partners <- colnames(this_df)[4:ncol(this_df)]
+  n_partners <- length(these_partners)
+  this_min_yr <- min(this_df$Year)
+  n_yrs_pad <- this_min_yr - ts_start_yr
+  if(n_yrs_pad > 0){
+    df_pad <- as.data.frame(matrix(NA, ncol = n_partners, nrow = n_yrs_pad))
+    colnames(df_pad) <- these_partners
+    df_pad$Year <- as.integer(ts_start_yr:(this_min_yr - 1))
+    df_pad$Reporter.Countries <- this_reporterCountry
+    df_pad$Element <- "Export Quantity"
+    df_pad_ExpQuant <- df_pad[, c("Reporter.Countries", "Year", "Element", these_partners)]
+    df_pad_ExpValue <- df_pad[, c("Reporter.Countries", "Year", "Element", these_partners)]
+    df_pad_ExpValue$Element <- "Export Value"
+    df_pad <- rbind(df_pad_ExpQuant, df_pad_ExpValue)
+    this_df <- rbind(df_pad, this_df)
+  }
+  gathercols <- colnames(this_df)[4:ncol(this_df)]
+  #<- this_df %>% gather_("Region", "Value", gathercols)
+  this_df <- this_df %>% gather_("Region", "Value", gathercols)
+  
+  #---------------
+  plot_this <- this_df %>% spread(Element, Value)
+  plot_this$Price <- plot_this$`Export Value` / plot_this$`Export Quantity`
+  plot_this[is.na(plot_this)] <- 0
+  plot_this <- as.data.frame(plot_this %>% group_by(Region) %>% 
+                               mutate(mu = mean(`Export Quantity`, na.rm = T)))
+  plot_this$Region <- factor(plot_this$Region,
+                             levels = unique(plot_this$Region[order(plot_this$mu, plot_this$Region, decreasing = T)]),
+                             ordered = T)
+  gg <- ggplot(plot_this, aes(x = Year, y = `Export Quantity`, fill = Region))
+  gg <- gg + geom_area(position = "stack")
+  gg <- gg + ggtitle(this_reporterCountry)
+  #  blues <- colorRampPalette(c('lightblue', 'darkblue'))
+  #  gg <- gg + scale_fill_manual(values = blues(n_partners))
+  gg
+  
+  list_df[[i]] <- this_df
+}
+
+
+
+
+df_all <- do.call(rbind, list_df)
+df_all$Value[is.na(df_all$Value)] <- 0
+# df_all$Partner.Countries <- NULL
+# df_all <- df_all %>% group_by(Reporter.Countries, Year, Element, Region) %>%
+#   summarise(Value = sum(Value))
+df_all <- df_all %>% spread(Element, Value)
+df_all$Price <- df_all$`Export Value` / df_all$`Export Quantity`
+df_all$Price[is.nan(df_all$Price)] <- 0
+# u <- df_plot$`Export Quantity`
+# df_plot$Region[which(u == 0)] <- NA
+df_all <- as.data.frame(df_all %>% group_by(Reporter.Countries, Region) %>% 
+                          mutate(mu = mean(`Export Quantity`, na.rm = T)))
+df_all$Region <- factor(df_all$Region,
+                        levels = unique(df_all$Region[order(df_all$mu, df_all$Region, decreasing = T)]),
+                        ordered = T)
+
+df_plot <- df_all
+gg <- ggplot(df_plot, aes(x = Year, y = `Export Quantity`, fill = Region))
+gg <- gg + geom_area(position = "stack")
+gg <- gg + facet_wrap(~Reporter.Countries, ncol = 2, scales = "free")
+gg <- gg + labs(caption = "Source: FAO")
+#gg <- gg + theme(legend.title = element_blank())
+gg
+ggsave("beans_tradePartners_qty_disagd.png")
+
+#--
+gg <- ggplot(df_plot, aes(x = Year, y = Price, fill = Region))
+gg <- gg + geom_area(position = "stack")
+gg <- gg + facet_wrap(~Reporter.Countries, ncol = 2, scales = "free")
+gg <- gg + labs(y = ' "Price"  (export value / export quantity)',
+                caption = "Source: FAO")
+gg
+ggsave("beans_tradePartners_price_disagd.png")
+#----
+df_plot <- df_all
+df_plot$Reporter.Countries <- NULL
+df_plot$mu <- NULL
+df_plot$Price <- NULL
+df_plot <- df_plot %>% group_by(Region, Year) %>% summarise_all(funs(sum)) %>% as.data.frame(df_all)
+df_plot$Price <- df_plot$`Export Value` / df_plot$`Export Quantity`
+df_plot <- df_plot %>% group_by(Region) %>% mutate(mu = mean(`Export Quantity`, na.rm = T)) %>% as.data.frame(df_plot)
+df_plot$Region <- factor(df_plot$Region,
+                         levels = unique(df_plot$Region[order(df_plot$mu, df_plot$Region, decreasing = T)]),
+                         ordered = T)
+this_title <- paste(countries_keep, collapse = ", ")
+gg <- ggplot(df_plot, aes(x = Year, y = `Export Quantity`, fill = Region))
+gg <- gg + geom_area(position = "stack")
+gg <- gg + labs(title = this_title,
+                caption = "Source: FAO")
+#gg <- gg + theme(legend.title = element_blank())
+gg
+ggsave("beans_tradePartners_qty_agd.png")
+#--
+df_plot$Price[which(is.nan(df_plot$Price))] <- 0
+gg <- ggplot(df_plot, aes(x = Year, y = Price, fill = Region))
+gg <- gg + geom_area(position = "stack")
+gg <- gg + labs(title = this_title,
+                y = ' "Price"  (export value / export quantity)',
+                caption = "Source: FAO")
+gg
+ggsave("beans_tradePartners_price_agd.png")
