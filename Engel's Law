@@ -1,0 +1,342 @@
+library(tidyverse)
+#===========================================================================
+FAOdat_createRegionGroups <- function(df_raw, exclude_these, keep_FAOregions = F,
+                                      df_is_trade_matrix = F,
+                                      consolidate_LAC = T,
+                                      consolidate_WEur = T,
+                                      consolidate_AusNZPacIslands = T,
+                                      consolidate_SSA = T,
+                                      output_countryVecs = F)
+{
+  #=================================
+  #--Africa
+  countries_NAfrica <- as.character(unique(read.csv("Country list - Northern Africa.csv")[,"Area"]))
+  countries_MAfrica <- as.character(unique(read.csv("Country list - Middle Africa.csv")[,"Area"]))
+  countries_WAfrica <- as.character(unique(read.csv("Country list - Western Africa.csv")[,"Area"]))
+  countries_EAfrica <- as.character(unique(read.csv("Country list - Eastern Africa.csv")[,"Area"]))
+  countries_SAfrica <- as.character(unique(read.csv("Country list - Southern Africa.csv")[,"Area"]))
+  #--Americas
+  countries_SAmer <- as.character(unique(read.csv("Country list - South America.csv")[,"Area"]))
+  countries_CAmer <- as.character(unique(read.csv("Country list - Central America.csv")[,"Area"]))
+  countries_Carib <- as.character(unique(read.csv("Country list - Caribbean.csv")[,"Area"]))
+  countries_NAmer <- as.character(unique(read.csv("Country list - Northern America.csv")[,"Country"]))
+  #--Asia
+  countries_EAsia <- as.character(unique(read.csv("Country list - Eastern Asia.csv")[,"Area"]))
+  #countries_EAsia <- countries_EAsia[!(countries_EAsia %in% c("China, Hong Kong SAR", "China, Macao SAR"))]
+  countries_SEAsia <- as.character(unique(read.csv("Country list - South-Eastern Asia.csv")[,"Area"]))
+  countries_SAsia <- as.character(unique(read.csv("Country list - Southern Asia.csv")[,"Area"]))
+  countries_WAsia <- as.character(unique(read.csv("Country list - Western Asia.csv")[,"Area"]))
+  countries_CAsia <- as.character(unique(read.csv("Country list - Central Asia.csv")[,"Area"]))
+  #--Europe
+  countries_NEurope <- as.character(unique(read.csv("Country list - Northern Europe.csv")[,"Area"]))
+  countries_WEurope <- as.character(unique(read.csv("Country list - Western Europe.csv")[,"Area"]))
+  countries_EEurope <- as.character(unique(read.csv("Country list - Eastern Europe.csv")[,"Area"]))
+  countries_SEurope <- as.character(unique(read.csv("Country list - Southern Europe.csv")[,"Area"]))
+  #--Oceania
+  countries_Oceania <- as.character(unique(read.csv("Country list - Oceania.csv")[,"Area"]))
+  countries_AusNZea <- c("Australia", "New Zealand")
+  countries_PacifIs <- setdiff(countries_Oceania, countries_AusNZea)
+  #=================================
+  #--Create region groupings
+  if(df_is_trade_matrix){
+    u <- df_raw$Partner.Countries
+  }else{
+    u <- df_raw$Area
+  }
+  df_raw$Region <- NA
+  df_raw$Region[which(u %in% countries_NAmer)] <- "North America"
+  df_raw$Region[which(u %in% countries_SAmer)] <- "South America"
+  df_raw$Region[which(u %in% countries_CAmer)] <- "Central America"
+  df_raw$Region[which(u %in% countries_Carib)] <- "Caribbean"
+  df_raw$Region[which(u %in% countries_NAfrica)] <- "Northern Africa"
+  df_raw$Region[which(u %in% countries_SAfrica)] <- "Southern Africa"
+  df_raw$Region[which(u %in% countries_WAfrica)] <- "Western Africa"
+  df_raw$Region[which(u %in% countries_EAfrica)] <- "Eastern Africa"
+  df_raw$Region[which(u %in% countries_MAfrica)] <- "Middle Africa"
+  df_raw$Region[which(u %in% countries_CAsia)] <- "Central Asia"
+  df_raw$Region[which(u %in% countries_WAsia)] <- "Western Asia"
+  df_raw$Region[which(u %in% countries_SAsia)] <- "Southern Asia"
+  df_raw$Region[which(u %in% countries_EAsia)] <- "Eastern Asia"
+  df_raw$Region[which(u %in% countries_SEAsia)] <- "South-Eastern Asia"
+  df_raw$Region[which(u %in% countries_NEurope)] <- "Northern Europe"
+  df_raw$Region[which(u %in% countries_SEurope)] <- "Southern Europe"
+  df_raw$Region[which(u %in% countries_WEurope)] <- "Western Europe"
+  df_raw$Region[which(u %in% countries_EEurope)] <- "Eastern Europe"
+  df_raw$Region[which(u %in% countries_PacifIs)] <- "Pacific Islands"
+  df_raw$Region[which(u %in% countries_AusNZea)] <- "Australia & New Zealand"
+  rm(u)
+  #--------------------
+  #--See what countries escaped designation
+  #unique(df_raw$Area[which(is.na(df_raw$Region))])
+  #--Assign these to their proper regions
+  #(Leave out "China" as it is already covered under "China, mainlaind", "Hong Kong", etc.)
+  if(df_is_trade_matrix){
+    u <- df_raw$Partner.Countries
+  }else{
+    u <- df_raw$Area
+  }
+  df_raw$Region[which(u %in% c("Åland Islands", "Isle of Man", "Greenland"))] <- "Northern Europe"
+  df_raw$Region[which(u %in% c("Anguilla", "Bermuda", "Cayman Islands", "Curaçao"))] <- "Caribbean"
+  df_raw$Region[which(u %in% c("Côte d'Ivoire"))] <- "Western Africa"
+  df_raw$Region[which(u %in% c("Palau"))] <- "Pacific Islands"
+  df_raw$Region[which(u %in% c("Maldives", "Réunion"))] <- "Southern Asia"
+  df_raw$Region[which(u %in% c("French Guiana"))] <- "South America"
+  rm(u)
+  #===========================
+  #unique(df_raw$Area[which(is.na(df_raw$Region) == T)])
+  if(!(df_is_trade_matrix)){
+    ind_NA <- which(is.na(df_raw$Region) == T)
+    ind_noNA <- which(is.na(df_raw$Region) == F)
+    if(keep_FAOregions == F){
+      df_raw <- df_raw[ind_noNA,]
+    }else{
+      df_raw$Region[ind_NA] <- df_raw$Area[ind_NA] 
+    }
+  }
+  #===========================
+  #--
+  if(df_is_trade_matrix){
+    df_raw <- subset(df_raw, !(Partner.Countries %in% exclude_these))
+  }else{
+    df_raw <- subset(df_raw, !(Area %in% exclude_these))
+  }
+  #--
+  if(consolidate_LAC){
+    LAC <- c("Central America", "Caribbean", "South America")
+    u <- df_raw$Region
+    df_raw$Region[which(u %in% LAC)] <- "LAC"
+    rm(u)
+  }
+  if(consolidate_WEur){
+    Europe_WNS <- c("Southern Europe", "Western Europe", "Northern Europe")
+    u <- df_raw$Region
+    df_raw$Region[which(u %in% Europe_WNS)] <- "W/N/S Europe"
+    rm(u)
+  }
+  if(consolidate_AusNZPacIslands){
+    AusNZPacIslands <- c("Australia & New Zealand", "Pacific Islands")
+    u <- df_raw$Region
+    df_raw$Region[which(u %in% AusNZPacIslands)] <- "Aus/NZ/Oceania"
+    rm(u)
+  }
+  if(consolidate_SSA){
+    SSA <- c("Eastern Africa", "Southern Africa", "Western Africa", "Middle Africa")
+    u <- df_raw$Region
+    df_raw$Region[which(u %in% SSA)] <- "Sub-Saharan Africa"
+    rm(u)
+  }
+  
+  # Europe_E <- "Eastern Europe"
+  # ESE_Asia <- c("South-Eastern Asia", "Eastern Asia")
+  #--
+  # u <- df_raw$Region
+  # df_raw$Region[which(u %in% LAC)] <- "LAC"
+  # df_raw$Region[which(u %in% Europe_E)] <- "E. Europe"
+  # df_raw$Region[which(u %in% ESE_Asia)] <- "E. & S.E. Asia"
+  # rm(u)
+  #--
+  if(output_countryVecs){
+    out_list <- list()
+    out_list[["Northern Africa"]] <- countries_NAfrica
+    out_list[["Middle Africa"]] <- countries_MAfrica
+    out_list[["Western Africa"]] <- countries_WAfrica
+    out_list[["Eastern Africa"]] <- countries_EAfrica
+    out_list[["Southern Africa"]] <- countries_SAfrica
+    out_list[["df_raw"]] <- df_raw
+    return(out_list)
+  }else{
+    return(df_raw)
+  }
+  
+}
+
+#===========================================================================
+
+
+df_raw <- read.csv("ICP Data/WB_ICP_All.csv", stringsAsFactors = F)
+#colnames(df_raw)
+rm_cols <- c("Country.Code", "Classification.Code", "Series.Code")
+rm_cols <- which(colnames(df_raw) %in% rm_cols)
+df_raw <- df_raw[, -c(rm_cols)]
+#colnames(df)
+u <- colnames(df_raw)
+colnames(df_raw) <- gsub("^.*YR", "", u)
+u <- colnames(df_raw)
+colnames(df_raw) <- gsub("\\.", "", u)
+# unique(df_raw$ClassificationName)
+# unique(df_raw$SeriesName)
+colnames(df_raw)[1:3] <- c("Country", "Element", "Item")
+gather_these <- colnames(df_raw)[4:ncol(df_raw)]
+df_raw <- df_raw %>% gather_("Year", "Value", gather_these)
+df_raw$Year <- as.integer(df_raw$Year)
+df_raw$Value <- as.numeric(df_raw$Value)
+u <- df_raw$Item
+df_raw$Item <- gsub("^.*:", "", u)
+#unique(df_raw$Country)
+df_raw <- subset(df_raw, !(Country %in% c("", "Data from database: ICP 2017",
+                                        "Last Updated: 06/19/2020")))
+#-------------------------------------------------------------------------
+#list.files("FAO Data/")
+df_gdp <- read.csv("FAO Data/FAO GDP per capita.csv", stringsAsFactors = F)
+#colnames(df_gdp)
+df_gdp <- df_gdp[, c("Area", "Element", "Item", "Year", "Value")]
+#unique(df_gdp$Area[grep("China", df_gdp$Area)])
+df_gdp$Area[which(df_gdp$Area == "United Kingdom of Great Britain and Northern Ireland")] <-
+  "United Kingdom"
+df_gdp <- FAOdat_createRegionGroups(df_gdp, exclude_these = NULL, keep_FAOregions = F,
+                                      df_is_trade_matrix = F,
+                                      consolidate_LAC = T,
+                                      consolidate_WEur = T,
+                                      consolidate_AusNZPacIslands = F,
+                                      consolidate_SSA = T,
+                                      output_countryVecs = F)
+#df_gdp$Area[which(is.na(df_gdp$Region))]
+
+colnames(df_gdp)[1] <- "Country"
+#-------------------------------------------------------------------------
+df_engel <- df_raw
+#-------------------------------------------------------------------------
+# unique(df_gdp$Country[grep("China", df_gdp$Country, ignore.case = T)])
+# unique(df_engel$Country[grep("China", df_engel$Country)])
+df_gdp$Country[grep("Tanzania", df_gdp$Country)] <- "Tanzania"
+df_gdp$Country[grep("Viet Nam", df_gdp$Country)] <- "Vietnam"
+df_gdp$Country[grep("Republic of the Congo", df_gdp$Country)] <- "DRC"
+df_gdp$Country[grep("Congo", df_gdp$Country)] <- "Congo"
+df_engel$Country[grep("Congo, Dem. Rep.", df_engel$Country)] <- "DRC"
+df_engel$Country[grep("Congo", df_engel$Country)] <- "Congo"
+df_gdp$Country[grep("United States", df_gdp$Country)] <- "United States"
+df_gdp$Country[which(df_gdp$Country == "Republic of Korea")] <- "South Korea"
+df_engel$Country[which(df_engel$Country == "Korea, Rep.")] <- "South Korea"
+df_gdp$Country[which(df_gdp$Country == "China, mainland")] <- "China"
+#-------------------------------------------------------------------------
+exclude_these <- setdiff(unique(df_engel$Country), unique(df_gdp$Country))
+and_these <- setdiff(unique(df_gdp$Country), unique(df_engel$Country))
+exclude_these <- c(exclude_these, and_these)
+df_engel <- subset(df_engel, !(Country %in% exclude_these))
+df_gdp <- subset(df_gdp, !(Country %in% exclude_these))
+df_regionKey <- df_gdp[-which(duplicated(df_gdp$Country)), c("Country", "Region")]
+df_engel <- merge(df_engel, df_regionKey, by = "Country")
+df_engel <- rbind(df_engel, df_gdp)
+#-------------------------------------------------------------------------
+#unique(df_engel$Region)
+df_engel$Region[grep("Europe", df_engel$Region)] <- "Europe"
+df_engel$Region[grep("Africa", df_engel$Region)] <- "Africa"
+df_engel$Region[grep("Western Asia", df_engel$Region)] <- "Middle East"
+df_engel$Region[grep("Asia", df_engel$Region)] <- "Asia"
+df_engel$Region[grep("North America", df_engel$Region)] <- "Europe/N. Amer/\nAustralia/NZ"
+df_engel$Region[grep("Europe", df_engel$Region)] <- "Europe/N. Amer/\nAustralia/NZ"
+df_engel$Region[grep("Australia & New Zealand", df_engel$Region)] <- "Europe/N. Amer/\nAustralia/NZ"
+df_engel <- subset(df_engel, Country != "Fiji")
+#-------------------------------------------------------------------------
+item_vec <- c("FOOD", "Gross Domestic Product per capita")
+#unique(df_engel$Element)
+df_plot <- subset(df_engel, Item %in% item_vec &
+                 Year == 2017)
+df_plot <- df_plot[which(!is.na(df_plot$Value)), ]
+#unique(df_plot$Element)
+element_vec <- c("Real expenditures per capita (U.S. dollars)",
+                 "Expenditure shares (GDP = 100)",
+                 "Value US$, 2015 prices")
+df_plot <- subset(df_plot, Element %in% element_vec)
+df_plot$Item <- NULL
+df_plot <- df_plot %>% spread(Element, Value)
+# df_plot <- df_plot[which(!is.na(df_plot$FOOD)), ]
+# df_plot <- df_plot[which(!is.na(df_plot$`Gross Domestic Product per capita`)), ]
+df_plot <- df_plot[which(!is.na(df_plot$`Real expenditures per capita (U.S. dollars)`)), ]
+df_plot <- df_plot[which(!is.na(df_plot$`Value US$, 2015 prices`)), ]
+#df_plot <- df_plot[which(!is.na(df_plot$`Expenditure shares (GDP = 100)`)), ]
+# df_plot$`Gross Domestic Product per capita` <- log(df_plot$`Gross Domestic Product per capita`)
+# df_plot$FOOD <- log(df_plot$FOOD)
+#--------------------------------------------------------------------------
+colnames(df_plot)[4:6] <- c("2017 Food expenditure (% GDP), logged",
+                            "2017 Real food expenditure / capita (USD), logged",
+                            "2017 GDP / capita (USD), logged")
+df_plot$`2017 Food expenditure (% GDP), logged` <- log(df_plot$`2017 Food expenditure (% GDP), logged`)
+df_plot$`2017 Real food expenditure / capita (USD), logged` <- log(df_plot$`2017 Real food expenditure / capita (USD), logged`)
+df_plot$`2017 GDP / capita (USD), logged` <- log(df_plot$`2017 GDP / capita (USD), logged`)
+#--------------------------------------------------------------------------
+out_fitLine <- pracma::polyfit(df_plot$`2017 GDP / capita (USD), logged`,
+                               df_plot$`2017 Real food expenditure / capita (USD), logged`)
+m <- round(out_fitLine[1], 2)
+b <- round(out_fitLine[2], 2)
+
+labelThese_vec <- c("Tanzania", "Uganda", "Kenya", "Ethiopia",
+                    "India", "Malawi", "Madagascar", "South Africa",
+                    "DRC", "Austria", "United Kingdom", "Zambia",
+                    "Angola", "France", "Vietnam", "China", "Ghana",
+                    "Japan", "Australia", "United States", "Congo", "Spain",
+                    "Egypt", "Turkey", "Sudan", "South Korea",
+                    "Nicaragua", "Rwanda", "Burundi", "Mozambique",
+                    "Togo", "Central African Republic", "Chad", "Sierra Leone",
+                    "Zimbabwe", "Niger", "Liberia", "Italy")
+#unique(df_plot$Country)
+#df_plot$Country[which(df_plot$`2017 Real food expenditure / capita (USD), logged` < 5.5)]
+df_labelThese <- subset(df_plot, Country %in% labelThese_vec)
+#--------------------------------------------------------------------------
+gg <- ggplot(df_plot, aes(x = `2017 GDP / capita (USD), logged`,
+                          y = `2017 Real food expenditure / capita (USD), logged`,
+                          group = Region))
+gg <- gg + geom_point(aes(color = Region, shape = Region), size = 3)
+gg <- gg + geom_abline(slope = m, intercept = b,
+                       color = "cyan", linetype = "dashed", size = 1)
+gg <- gg + ggrepel::geom_text_repel(data = df_labelThese, aes(label = Country))
+gg <- gg + labs(title = "Engel's Law", 
+                subtitle = paste0("Slope = ", m, ", y-intercept = ", b),
+                caption = "Source: Author's creation based on World Bank International Comparison Program Data.
+                GDP/capita is based on 2015 prices.")
+gg <- gg + theme(legend.position = "top",
+                 legend.spacing.x = unit(1.0, 'cm'),
+                 legend.title = element_blank())
+gg
+#--------------------------------------------------------------------------
+out_fitLine <- pracma::polyfit(df_plot$`2017 GDP / capita (USD), logged`,
+                               df_plot$`2017 Food expenditure (% GDP), logged`)
+m <- round(out_fitLine[1], 2)
+b <- round(out_fitLine[2], 2)
+
+gg <- ggplot(df_plot, aes(x = `2017 GDP / capita (USD), logged`,
+                          y = `2017 Food expenditure (% GDP), logged`,
+                          group = Region))
+gg <- gg + geom_point(aes(color = Region, shape = Region), size = 3)
+gg <- gg + geom_abline(slope = m, intercept = b,
+                       color = "cyan", linetype = "dashed", size = 1)
+gg <- gg + ggrepel::geom_text_repel(data = df_labelThese, aes(label = Country))
+gg <- gg + labs(title = "Engel's Law, a different perspective", 
+                subtitle = paste0("Slope = ", m, ", y-intercept = ", b),
+                caption = "Source: Author's creation based on World Bank International Comparison Program Data.
+                GDP/capita is based on 2015 prices.")
+gg <- gg + theme(legend.position = "top",
+                 legend.spacing.x = unit(1.0, 'cm'),
+                 legend.title = element_blank())
+gg
+
+
+
+
+
+
+
+
+
+# unique(df_engel$Item)
+# expenditure_cats <- c("FOOD",
+#                       "Bread and cereals", "Meat",
+#                       "Fish and seafood",
+#                       "Milk, cheese and eggs",
+#                       "Oils and fats",
+#                       "Fruit",
+#                       "Vegetables",
+#                       "Sugar, jam, honey, chocolate and confectionery",
+#                       "Food products n.e.c. (Class)"#,
+#                       # "TRANSPORT",
+#                       # "PURCHASE OF VEHICLES",
+#                       # "TRANSPORT SERVICES",
+#                       # "COMMUNICATION",
+#                       # "RESTAURANTS AND HOTELS",
+#                       # "NET PURCHASES ABROAD",
+#                       # "ACTUAL HEALTH",
+#                       # "ACTUAL EDUCATION",
+#                       # "ACTUAL RECREATION AND CULTURE",
+#                       # "ACTUAL MISCELLANEOUS GOODS AND SERVICES",
+#                       # "ACTUAL HOUSING, WATER, ELECTRICITY, GAS AND OTHER FUELS"
+#                       )
