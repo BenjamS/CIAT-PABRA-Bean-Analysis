@@ -288,6 +288,7 @@ gg <- gg + theme(legend.position = "top",
                  legend.spacing.x = unit(1.0, 'cm'),
                  legend.title = element_blank())
 gg
+ggsave("Engels Law 1.png", width = 8.5, height = 6.5, units = "in")
 #--------------------------------------------------------------------------
 out_fitLine <- pracma::polyfit(df_plot$`2017 GDP / capita (USD), logged`,
                                df_plot$`2017 Food expenditure (% GDP), logged`)
@@ -301,7 +302,7 @@ gg <- gg + geom_point(aes(color = Region, shape = Region), size = 3)
 gg <- gg + geom_abline(slope = m, intercept = b,
                        color = "cyan", linetype = "dashed", size = 1)
 gg <- gg + ggrepel::geom_text_repel(data = df_labelThese, aes(label = Country))
-gg <- gg + labs(title = "Engel's Law, a different perspective", 
+gg <- gg + labs(title = "Engel's Law from a different perspective", 
                 subtitle = paste0("Slope = ", m, ", y-intercept = ", b),
                 caption = "Source: Author's creation based on World Bank International Comparison Program Data.
                 GDP/capita is based on 2015 prices.")
@@ -309,6 +310,7 @@ gg <- gg + theme(legend.position = "top",
                  legend.spacing.x = unit(1.0, 'cm'),
                  legend.title = element_blank())
 gg
+ggsave("Engels Law 2.png", width = 8.5, height = 6.5, units = "in")
 
 
 
