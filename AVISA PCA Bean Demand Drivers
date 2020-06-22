@@ -922,7 +922,7 @@ employment_vec <- c("Age dependency ratio, old (% of working-age population)",
                     "Employment in industry (% of total employment) (modeled ILO estimate)",
                     "Employment in services (% of total employment) (modeled ILO estimate)")
 
-group_names <- c("Staple Demand", "Producer and\nConsumer Prices",
+group_names <- c("Staple\nConsumption", "Producer and\nConsumer Prices",
                  "Land Use", "Macroeconomic\nIndicators",
                  "Demographics", "Employment")
 
@@ -1018,27 +1018,30 @@ include_vec <- c(#"Age dependency ratio, old (% of working-age population)",
                  "Urban/Rural Pop.",
                  "Agricultural land (share)",
                  "Prod. Price Volatility (CV)",
-                 "Prod. Price Index\n(Avg. 2016-2018)",
+                 "Prod. Price Index (Avg. 2016-2018)",
                  #"Food CPI Volatility (CV) 2018",
                  #"Gross Domestic Product per capita",
                  #"Land under permanent crops (share)",
-                 "Value Added (Agriculture, Forestry and Fishing)",
+                 #"Value Added (Agriculture, Forestry and Fishing)",
                  "Value Added (Total Manufacturing)",
                  "Total natural resources rents (% of GDP)",
                  "School enrollment, secondary (% gross)",
                  #"Life expectancy at birth, total (years)",
                  "Ratio of female to male labor force participation rate (%) (modeled ILO estimate)",
                  #"Proportion of seats held by women in national parliaments (%)",
-  "Income Inequality (Gini Coefficent)",
-#"Consumption Inequality",
+"Income Inequality (Gini Coefficient)",
+#"Consumption Inequality (Gini Coefficient)",
   #"Access to electricity (% of population)",
   "kcal/capita/day Sugar & Sweeteners",
-  #"kcal/capita/day Starchy Roots"#,
-  #"kcal/capita/day Cereals"#,
+  #"kcal/capita/day Starchy Roots",
+  #"kcal/capita/day Cereals",
   "kcal/capita/day Pulses"#,
 # "kcal/capita/day Oilcrops"
 #"kcal/capita/day Animal Products"
                  )
+
+#Alternative model: remove kcal sugar and income inequality or replace them with kcal animal products
+
 df_mod <- data.frame(y = mat_mod[, "Gross Domestic Product per capita"],
                      mat_mod[, which(colnames(mat_mod) %in% include_vec)])
 
@@ -1046,10 +1049,11 @@ colnames(df_mod)[-1] <- colnames(mat_mod[, which(colnames(mat_mod) %in% include_
 
 mod <- lm(y ~., data = df_mod)
 summary(mod)
-stargazer::stargazer(mod, type = "html", out = "mod.html")
+broom::tidy(mod)
+plot(mod$fitted.values, mod$residuals)
+hist(df_mod$y)
 
-
-plot(df$`kcal/capita/day Animal Products`, df$`Age dependency ratio, old (% of working-age population)`)
+#plot(df$`kcal/capita/day Animal Products`, df$`Age dependency ratio, old (% of working-age population)`)
 
 u <- car::vif(mod)
 u[which(u > 5)]
