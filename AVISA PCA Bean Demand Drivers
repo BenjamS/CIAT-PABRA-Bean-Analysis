@@ -224,7 +224,7 @@ df_pPrice$cv_price <- df_pPrice$sd_price / df_pPrice$mu_price
 df_pPrice <- df_pPrice[-which(duplicated(df_pPrice$cv_price)), c("Area", "mu_price", "cv_price")]
 # hist(df_pPrice$cv_price)
 # hist(df_pPrice$mu_price)
-colnames(df_pPrice)[2:3] <- c("Prod. Price Index\n(Avg. 2016-2018)", "Prod. Price Volatility (CV)")
+colnames(df_pPrice)[2:3] <- c("Prod. Price Index (Avg. 2016-2018)", "Prod. Price Volatility (CV)")
 #============================================================================
 rm(df_raw_pPrice); gc()
 #============================================================================
@@ -322,20 +322,29 @@ df_macro <- subset(df_raw_macro, Item %in% item_vec &
                      Element == this_element)
 # df_macro<- df_macro %>% group_by(Area, Item) %>%
 #   summarise(Value = mean(Value, na.rm = T))
-df_macro <- df_macro %>% group_by(Area, Element, Item) %>%
+df_macro_chng <- df_macro %>% group_by(Area, Element, Item) %>%
   mutate(`Value Pct. Chng.` = 100 * diff(Value) / Value[1]) %>%
   as.data.frame()
+df_macro_chng <- subset(df_macro_chng, Year == 2018)
+df_macro_chng$Year <- NULL
+df_macro_chng$Element <- NULL
+df_macro_chng$Unit <- NULL
+df_macro_chng$Value <- NULL
+df_macro_chng <- df_macro_chng %>% spread(Item, `Value Pct. Chng.`)
+colnames(df_macro_chng)[2:4] <- paste(colnames(df_macro_chng)[2:4], "Chng")
 df_macro <- subset(df_macro, Year == 2018)
 df_macro$Year <- NULL
 df_macro$Element <- NULL
-df_macro$Value <- NULL
 df_macro$Unit <- NULL
-#df_macro <- df_macro %>% spread(Item, Value)
-df_macro <- df_macro %>% spread(Item, `Value Pct. Chng.`)
+df_macro <- df_macro %>% spread(Item, Value)
 apply(df_macro, 2, fn_na_count)
 apply(df_macro, 2, fn_inf_count)
+apply(df_macro_chng, 2, fn_na_count)
+apply(df_macro_chng, 2, fn_inf_count)
 df_macro <- df_macro[which(!is.na(df_macro$`Gross Domestic Product per capita`)), ]
 df_macro <- df_macro[which(!is.na(df_macro$`Value Added (Agriculture, Forestry and Fishing)`)), ]
+df_macro_chng <- df_macro_chng[which(!is.na(df_macro_chng$`Gross Domestic Product per capita`)), ]
+df_macro_chng <- df_macro_chng[which(!is.na(df_macro_chng$`Value Added (Agriculture, Forestry and Fishing)`)), ]
 #============================================================================
 rm(df_raw_macro); gc()
 #============================================================================
@@ -412,45 +421,45 @@ rm(df_raw_pop); gc()
 #============================================================================
 #============================================================================
 # Get DFA
-df_raw_dfa <- read.csv("FAO Data/Development_Assistance_to_Agriculture_E_All_Data.csv", stringsAsFactors = F)
-rm_cols <- c("Donor.Code", "Recipient.Country.Code",
-             "Item.Code", "Element.Code", "Purpose.Code")
-rm_cols <- which(colnames(df_raw_dfa) %in% rm_cols)
-df_raw_dfa <- df_raw_dfa[, -rm_cols]
-#unique(df_raw_dfa$Item)
-df_raw_dfa$Item <- as.character(df_raw_dfa$Item)
-df_raw_dfa$Area <- as.character(df_raw_dfa$Area)
-u <- colnames(df_raw_dfa)
-df_raw_dfa <- df_raw_dfa[, -grep("F", u)]
-u <- colnames(df_raw_dfa)
-df_raw_dfa <- df_raw_dfa[, -grep("N", u)]
-v <- colnames(df_raw_dfa)[7:ncol(df_raw_dfa)]
-colnames(df_raw_dfa)[7:ncol(df_raw_dfa)] <- gsub("Y", "", v)
-#---------------------------------------------------------------------------
-# Check available years
-#colnames(df_raw_dfa)
-#---------------------------------------------------------------------------
-available_yrs <- as.character(c(1973:2018))
-df_raw_dfa <- gather_(df_raw_dfa, "Year", "Value", gather_cols = available_yrs)
-#df_raw_dfa$Unit <- NULL
-#---------------------------------------------------------------------------
-#unique(df_raw_dfa$Item)
-#unique(df_raw_dfa$Element)
-#unique(df_raw_dfa$Donor)
-this_year <- 2018
-this_item <- "Commitment ODA"
-this_purpose <- "Agriculture"
-this_element <- "Value US$"
-this_donor <- "Bilateral Donors"
-df_dfa <- subset(df_raw_dfa, Item == this_item &
-                     Year == this_year &
-                   Purpose == this_purpose &
-                   Element == this_element & Donor == this_donor)
-df_dfa <- df_dfa[, c("Recipient.Country", "Value")]
-df_dfa <- df_dfa[which(!is.na(df_dfa$Value)), ]
-colnames(df_dfa) <- c("Area", paste("ODA Commitment\nAgriculture (millions USD)", this_year))
-#============================================================================
-rm(df_raw_dfa); gc()
+# df_raw_dfa <- read.csv("FAO Data/Development_Assistance_to_Agriculture_E_All_Data.csv", stringsAsFactors = F)
+# rm_cols <- c("Donor.Code", "Recipient.Country.Code",
+#              "Item.Code", "Element.Code", "Purpose.Code")
+# rm_cols <- which(colnames(df_raw_dfa) %in% rm_cols)
+# df_raw_dfa <- df_raw_dfa[, -rm_cols]
+# #unique(df_raw_dfa$Item)
+# df_raw_dfa$Item <- as.character(df_raw_dfa$Item)
+# df_raw_dfa$Area <- as.character(df_raw_dfa$Area)
+# u <- colnames(df_raw_dfa)
+# df_raw_dfa <- df_raw_dfa[, -grep("F", u)]
+# u <- colnames(df_raw_dfa)
+# df_raw_dfa <- df_raw_dfa[, -grep("N", u)]
+# v <- colnames(df_raw_dfa)[7:ncol(df_raw_dfa)]
+# colnames(df_raw_dfa)[7:ncol(df_raw_dfa)] <- gsub("Y", "", v)
+# #---------------------------------------------------------------------------
+# # Check available years
+# #colnames(df_raw_dfa)
+# #---------------------------------------------------------------------------
+# available_yrs <- as.character(c(1973:2018))
+# df_raw_dfa <- gather_(df_raw_dfa, "Year", "Value", gather_cols = available_yrs)
+# #df_raw_dfa$Unit <- NULL
+# #---------------------------------------------------------------------------
+# #unique(df_raw_dfa$Item)
+# #unique(df_raw_dfa$Element)
+# #unique(df_raw_dfa$Donor)
+# this_year <- 2018
+# this_item <- "Commitment ODA"
+# this_purpose <- "Agriculture"
+# this_element <- "Value US$"
+# this_donor <- "Bilateral Donors"
+# df_dfa <- subset(df_raw_dfa, Item == this_item &
+#                      Year == this_year &
+#                    Purpose == this_purpose &
+#                    Element == this_element & Donor == this_donor)
+# df_dfa <- df_dfa[, c("Recipient.Country", "Value")]
+# df_dfa <- df_dfa[which(!is.na(df_dfa$Value)), ]
+# colnames(df_dfa) <- c("Area", paste("ODA Commitment\nAgriculture (millions USD)", this_year))
+# #============================================================================
+# rm(df_raw_dfa); gc()
 #============================================================================
 #============================================================================
 #============================================================================
@@ -490,11 +499,16 @@ df_trade <- df_trade %>% group_by(Area, Element) %>%
   as.data.frame()
 df_trade <- subset(df_trade, Year == 2017)
 df_trade$Year <- NULL
-df_trade <- df_trade[, c("Area", "Element", "Value Change")]
-df_trade <- df_trade %>% spread(Element, `Value Change`)
-colnames(df_trade)[2:3] <- c("Export Index Change", "Import Index Change")
-df_trade <- df_trade[which(!is.na(df_trade$`Export Index Change`)), ]
-df_trade <- df_trade[which(!is.na(df_trade$`Import Index Change`)), ]
+df_trade_chng <- df_trade[, c("Area", "Element", "Value Change")]
+df_trade_chng <- df_trade_chng %>% spread(Element, `Value Change`)
+colnames(df_trade_chng)[2:3] <- paste(colnames(df_trade_chng)[2:3], "Change")
+df_trade_chng <- df_trade_chng[which(!is.na(df_trade_chng$`Export Unit/Value Index (2004-2006 = 100) Change`)), ]
+df_trade_chng <- df_trade_chng[which(!is.na(df_trade_chng$`Import Unit/Value Index (2004-2006 = 100) Change`)), ]
+df_trade <- df_trade[, c("Area", "Element", "Value")]
+df_trade <- df_trade %>% spread(Element, Value)
+#colnames(df_trade)[2:3] <- c("Export Index", "Import Index")
+df_trade <- df_trade[which(!is.na(df_trade$`Export Unit/Value Index (2004-2006 = 100)`)), ]
+df_trade <- df_trade[which(!is.na(df_trade$`Import Unit/Value Index (2004-2006 = 100)`)), ]
 #============================================================================
 rm(df_raw_trade); gc()
 #============================================================================
@@ -553,6 +567,84 @@ df_landUse <- subset(df_landUse, Year == 2017)
 df_landUse$Year <- NULL
 #============================================================================
 rm(df_raw_landUse); gc()
+#============================================================================
+#============================================================================
+#============================================================================
+df_CIneq_raw <- read.csv("GCIP Data/Consumption Inequality/consumption-inequalityexcel.csv", stringsAsFactors = F)
+df_IIneq_raw <- read.csv("GCIP Data/Income Inequality/income-inequalityexcel.csv", stringsAsFactors = F)
+# colnames(df_CIneq_raw)
+# unique(df_CIneq_raw$country)
+# unique(df_CIneq_raw$year)
+df_CIneq_raw$year <- as.integer(df_CIneq_raw$year)
+df_IIneq_raw$year <- as.integer(df_IIneq_raw$year)
+df_CIneq_raw <- df_CIneq_raw[, c("country", "year", "gini")]
+df_IIneq_raw <- df_IIneq_raw[, c("country", "year", "gini")]
+df_CIneq_raw$Type <- "Consumption Inequality (Gini Coefficient)"
+df_IIneq_raw$Type <- "Income Inequality (Gini Coefficient)"
+df_Ineq <- rbind(df_CIneq_raw, df_IIneq_raw)
+colnames(df_Ineq)[2] <- "Year"
+df_Ineq <- subset(df_Ineq, Year == 2015)
+df_Ineq$Year <- NULL
+df_Ineq <- df_Ineq %>% spread(Type, gini)
+colnames(df_Ineq)[1] <- "Area"
+#============================================================================
+rm(df_CIneq_raw, df_IIneq_raw); gc()
+#============================================================================
+#============================================================================
+#============================================================================
+# df_raw <- read.csv("WDI Data/WDIData.csv",
+#                    stringsAsFactors = F)
+# unique(df_raw$Indicator.Name[grep("internet", df_raw$Indicator.Name, ignore.case = T)])
+# 
+# these_indicators <- c("Access to electricity (% of population)",
+#                       "Age dependency ratio, old (% of working-age population)",
+#                       "Age dependency ratio, young (% of working-age population)",
+#                       "Life expectancy at birth, total (years)",
+#                       "Employment in agriculture (% of total employment) (modeled ILO estimate)",
+#                       "Employment in industry (% of total employment) (modeled ILO estimate)",
+#                       "Employment in services (% of total employment) (modeled ILO estimate)",
+#                       "Ratio of female to male labor force participation rate (%) (modeled ILO estimate)",
+#                       "Total natural resources rents (% of GDP)",
+#                       "School enrollment, primary (% gross)",
+#                       "School enrollment, secondary (% gross)",
+#                       "Proportion of seats held by women in national parliaments (%)",
+#                       "Individuals using the Internet (% of population)")
+# df <- subset(df_raw, Indicator.Name %in% these_indicators)
+# df$Country.Code <- NULL
+# df$Indicator.Code <- NULL
+# df$X <- NULL
+# colnames(df)[1:2] <- c("Country", "Indicator")
+# colnames(df)[3:ncol(df)] <- gsub("X", "", colnames(df)[3:ncol(df)])
+# df <- df %>% gather(Year, Value, `1960`:`2019`)
+# df$Year <- as.integer(df$Year)
+# write.csv(df, "WDI Data/WDI Data reduced.csv")
+#----------------------------------------------------------------------------
+df_raw <- read.csv("WDI Data/WDI Data reduced.csv", stringsAsFactors = F)
+df_raw$X <- NULL
+
+# exclude_vec <- c("Life expectancy at birth, total (years)",
+#                  "Employment in services (% of total employment) (modeled ILO estimate)",
+#                  "Employment in industry (% of total employment) (modeled ILO estimate)",
+#                  "Employment in agriculture (% of total employment) (modeled ILO estimate)",
+#                  "Proportion of seats held by women in national parliaments (%)",
+#                  "Access to electricity (% of population)",
+#                  "School enrollment, primary (% gross)"
+#                  )
+
+df_wdi <- subset(df_raw, Year == 2017 &
+                   !(Indicator %in% c("Access to electricity (% of population)",
+                                      "School enrollment, primary (% gross)")))# & !(Indicator %in% exclude_vec))
+df_wdi$Year <- NULL
+df_wdi <- df_wdi %>% spread(Indicator, Value)
+apply(df_wdi, 2, fn_na_count)
+df_wdi <- df_wdi[which(!is.na(df_wdi$`School enrollment, secondary (% gross)`)), ]
+df_wdi <- df_wdi[which(!is.na(df_wdi$`Total natural resources rents (% of GDP)`)), ]
+df_wdi <- df_wdi[which(!is.na(df_wdi$`Ratio of female to male labor force participation rate (%) (modeled ILO estimate)`)), ]
+df_wdi <- df_wdi[which(!is.na(df_wdi$`Proportion of seats held by women in national parliaments (%)`)), ]
+colnames(df_wdi)[1] <- "Area"
+#============================================================================
+rm(df_raw); gc()
+#============================================================================
 #============================================================================
 #============================================================================
 # END DATA PREP
@@ -659,7 +751,7 @@ plot_corrXS_barchart <- function(mat_L, group_info = NULL, xAxis_title = NULL, s
   if(is.null(sigNames)){
     signal_id <- paste("Signal", 1:n_signals)
   }else{
-    signal_id <- paste("Signal", 1:n_signals, "\n", sigNames)
+    signal_id <- sigNames
   }
   colnames(df_plot)[2:(n_signals + 1)] <- signal_id
   #-------------------------------------------------------
@@ -688,12 +780,12 @@ plot_corrXS_barchart <- function(mat_L, group_info = NULL, xAxis_title = NULL, s
   if(!is.null(xAxis_title)){
     gg <- gg + labs(y = xAxis_title)
   }
-  gg <- gg + theme(axis.text = element_text(size = 7),
-                   axis.title.x = element_text(size = 7),
+  gg <- gg + theme(axis.text = element_text(size = 8),
+                   axis.title.x = element_text(size = 8),
                    axis.title.y = element_blank(),
                    legend.title = element_blank(),
-                   legend.text = element_text(size = 7),
-                   strip.text = element_text(size = 7))
+                   legend.text = element_text(size = 8),
+                   strip.text = element_text(size = 8))
   gg <- gg + coord_equal()
   gg <- gg + coord_flip()
   gg
@@ -738,54 +830,130 @@ group_fn <- function(group_info){
 #fbalCols_kcalShare
 #fbalCols_kcal
 these_fbalCols <- fbalCols_kcal
-# this_df_fbal <- df_fbal[, these_fbalCols]
-this_df_fbal <- df_fbal_diff
-# if(length(grep("share", these_fbalCols)) == 0){
-#   this_df_fbal$`kcal/capita/day Other` <- NULL
-#   this_df_fbal$`kcal/capita/day Total` <- NULL
-#   this_df_fbal[this_df_fbal == 0] <- 1
-# }else{
-#   this_df_fbal$`kcal share Other` <- NULL
-#   this_df_fbal[this_df_fbal == 0] <- 0.001
-# }
+this_df_fbal <- df_fbal[, these_fbalCols]
+#this_df_fbal <- df_fbal_diff
+if(length(grep("share", these_fbalCols)) == 0){
+  this_df_fbal$`kcal/capita/day Other` <- NULL
+  this_df_fbal$`kcal/capita/day Total` <- NULL
+  this_df_fbal[this_df_fbal == 0] <- 1
+}else{
+  this_df_fbal$`kcal share Other` <- NULL
+  this_df_fbal[this_df_fbal == 0] <- 0.001
+}
 #this_df_fbal[, -1] <- log(this_df_fbal[, -1])
 #this_df_fbal$`kcal share Other` <- NULL
 #this_df_pPrice <- df_pPrice[, c("Area", "Prod. Price Volatility (CV)")]
 this_df_pPrice <- df_pPrice
-this_df_macro <- df_macro
+this_df_pop <- df_pop[, c("Area", "Urban/Rural Pop.")]
 nrow(this_df_fbal)
 nrow(this_df_pPrice)
 nrow(df_foodCPI)
-nrow(df_pop)
-nrow(this_df_macro)
-#nrow(df_dfa)
-nrow(df_trade)
+nrow(this_df_pop)
 nrow(df_landUse)
+nrow(df_macro)
+nrow(df_Ineq)
+nrow(df_trade)
+nrow(df_wdi)
+nrow(df_macro_chng)
+# df_prodConsumPrice <- merge(df_foodCPI, df_pPrice)
+# nrow(df_macro)
+# nrow(df_trade)
+# nrow(df_Ineq)
+# df_macEcon <- plyr::join_all(list(df_macro, df_trade, df_Ineq))
+# nrow(df_prodConsumPrice)
+# nrow(df_macEcon)
+# nrow(this_df_fbal)
 
-list_df <- list(df_foodCPI, this_df_fbal, this_df_pPrice,
-                df_pop, this_df_macro, df_trade, df_landUse)
+list_df <- list(df_landUse, df_macro,
+                this_df_pop,
+                this_df_fbal,
+                df_foodCPI,
+                df_wdi, df_trade,
+                df_pPrice, df_Ineq)
+
+for(i in 1:length(list_df)){
+  this_df <- list_df[[i]]
+  # print(i)
+  this_df$Area[grep("Tanzania", this_df$Area, ignore.case = T)] <- "Tanzania"
+  this_df$Area[grep("Iran", this_df$Area, ignore.case = T)] <- "Iran"
+  this_df$Area[grep("Syria", this_df$Area, ignore.case = T)] <- "Syria"
+  this_df$Area[grep("United States Virgin Islands", this_df$Area, ignore.case = T)] <- "US Virgin Islands"
+  this_df$Area[grep("British Virgin Islands", this_df$Area, ignore.case = T)] <- "UK Virgin Islands"
+  this_df$Area[grep("United States", this_df$Area, ignore.case = T)] <- "United States"
+  this_df$Area[grep("Viet", this_df$Area, ignore.case = T)] <- "Vietnam"
+  this_df$Area[grep("Democratic Republic of the Congo", this_df$Area, ignore.case = T)] <- "DRC"
+  this_df$Area[grep("Congo, Dem. Rep.", this_df$Area, ignore.case = T)] <- "DRC"
+  this_df$Area[grep("Bolivia", this_df$Area, ignore.case = T)] <- "Bolivia"
+  this_df$Area[grep("Singapore", this_df$Area, ignore.case = T)] <- "Singapore"
+  this_df$Area[grep("Macedonia", this_df$Area, ignore.case = T)] <- "Macedonia"
+  this_df$Area[grep("Venezuela", this_df$Area, ignore.case = T)] <- "Venezuela"
+  this_df$Area[grep("Ivoire", this_df$Area, ignore.case = T)] <- "Cote d'Ivoire"
+  this_df$Area[grep("Lanka", this_df$Area, ignore.case = T)] <- "Sri Lanka"
+  this_df$Area[grep("Eswatini", this_df$Area, ignore.case = T)] <- "Swaziland"
+  
+  print(this_df$Area[grep("China", this_df$Area, ignore.case = T)])
+  
+#  print(which(duplicated(this_df$Area)))
+  
+  list_df[[i]] <- this_df
+}
 #list_df <- list(this_df_fbal, df_pop)
 df <- plyr::join_all(list_df)
-#df[, -1] <- log(df[, -1])
-#exclude_vec <- c("Iran (Islamic Republic of)", "Indonesia")
-#df <- subset(df, !(Area %in% exclude_vec))
+#colnames(df)
+#----------------------------------------------------------------------------
+# Establish grouping info
+stapleDemand_vec <- colnames(this_df_fbal)[-1]
+prodConsumPrice_vec <- c(colnames(this_df_pPrice)[-1], 
+                         colnames(df_foodCPI)[-1])
+landUse_vec <- colnames(df_landUse)[-1]
+macro_vec <- c(colnames(df_macro)[-1],
+               colnames(df_Ineq)[-1],
+               colnames(df_trade)[-1],
+               "Total natural resources rents (% of GDP)")
+demographic_vec <- c("School enrollment, secondary (% gross)",
+                     "Proportion of seats held by women in national parliaments (%)",
+                     "Ratio of female to male labor force participation rate (%) (modeled ILO estimate)",
+                     "Urban/Rural Pop.",
+                     "Individuals using the Internet (% of population)",
+                     "Life expectancy at birth, total (years)")
+employment_vec <- c("Age dependency ratio, old (% of working-age population)",
+                    "Age dependency ratio, young (% of working-age population)",
+                    "Employment in agriculture (% of total employment) (modeled ILO estimate)",
+                    "Employment in industry (% of total employment) (modeled ILO estimate)",
+                    "Employment in services (% of total employment) (modeled ILO estimate)")
+
+group_names <- c("Staple Demand", "Producer and\nConsumer Prices",
+                 "Land Use", "Macroeconomic\nIndicators",
+                 "Demographics", "Employment")
+
+list_groups <- list(stapleDemand_vec, prodConsumPrice_vec,
+                    landUse_vec, macro_vec,
+                    demographic_vec, employment_vec)
+n_groups <- length(group_names)
+bag_of_colors <- randomcoloR::distinctColorPalette(k = 2 * n_groups)
+group_colors <- sample(bag_of_colors, n_groups)
+group_info <- list(list_groups, group_names, group_colors)
 #----------------------------------------------------------------------------
 # Remove NA
 apply(df, 2, fn_na_count)
 df <- df[which(!is.na(df$`Prod. Price Volatility (CV)`)), ]
-df <- df[which(!is.na(df$Pulses)), ]
+df <- df[which(!is.na(df$`kcal/capita/day Pulses`)), ]
 df <- df[which(!is.na(df$`Land under permanent crops (share)`)), ]
 df <- df[which(!is.na(df$`Forest land (share)`)), ]
-df <- df[which(!is.na(df$`Export Index Change`)), ]
+df <- df[which(!is.na(df$`Export Unit/Value Index (2004-2006 = 100)`)), ]
+df <- df[which(!is.na(df$`Income Inequality (Gini Coefficient)`)), ]
+df <- df[which(!is.na(df$`School enrollment, secondary (% gross)`)), ]
+df <- df[which(!is.infinite(df$`Total natural resources rents (% of GDP)`)), ]
+df <- df[which(!is.na(df$`Food CPI Volatility (CV) 2018`)), ]
 apply(df, 2, fn_inf_count)
-venezuela_str <- df$Area[grep("Venezuela", df$Area)]
-df <- subset(df, Area != venezuela_str)
+df <- subset(df, Area != "Venezuela")
 #----------------------------------------------------------------------------
 mat_X_in <- as.matrix(df[, -1])
 row.names(mat_X_in) <- df$Area
 #----------------------------------------------------------------------------
 eig_values <- round(eigen(cor(mat_X_in))$values, 8)
-c_vec <- eig_values / sum(eig_values)
+#View(cor(mat_X_in))
+c_vec <- round(eig_values / sum(eig_values), 4)
 ck_vec <- cumsum(c_vec)
 df_plot <- data.frame(Signal = paste("Signal", 1:length(eig_values)), Portion_explained = c_vec, Portion_explained_cumul = ck_vec)
 colnames(df_plot)[2:3] <- c("Individually", "Cumulatively")
@@ -803,7 +971,6 @@ gg <- gg + theme(axis.text.y = element_text(size = 7),
                  axis.title = element_blank(),
                  legend.title = element_text(size = 8),
                  legend.text = element_text(size = 8))
-
 gg
 #----------------------------------------------------------------------------
 n_signals <- which(ck_vec > 0.9)[1]
@@ -816,20 +983,7 @@ eig_values <- list_out[[3]]
 mat_P <- list_out[[4]]
 mat_S <- mat_S_all[, 1:n_signals]
 mat_L <- cormat_XS[, 1:n_signals]
-fbal_vec <- colnames(this_df_fbal)[-1]
-pop_vec <- colnames(df_pop[-1])
-macro_vec <- c(colnames(df_macro)[-1])#, colnames(df_labor)[-1])
-price_vec <- c(colnames(this_df_pPrice)[-1], colnames(df_foodCPI)[-1])
-trade_vec <- colnames(df_trade)[-1]
-landUse_vec <- colnames(df_landUse)[-1]
-list_groups <- list(fbal_vec, pop_vec, macro_vec, price_vec, trade_vec, landUse_vec)
-group_names <- c("Staple Demand", "Population", "Macroeconomic\nIndicators",
-                 "Staple Price", "Trade", "Land Use")
-n_groups <- length(group_names)
-bag_of_colors <- randomcoloR::distinctColorPalette(k = 5 * n_groups)
-group_colors <- sample(bag_of_colors, n_groups)
-group_info <- list(list_groups, group_names, group_colors)
-plot_corrXS_barchart(mat_L, group_info)
+plot_corrXS_barchart(mat_L[, 1:2], group_info)
 #------------------------------------------------------------------------
 mat_Lrot <- varimax(mat_L)[[1]]
 mat_Lrot <- matrix(as.numeric(mat_Lrot),
@@ -841,87 +995,70 @@ mat_R <- matrix(as.numeric(mat_R),
                 dimnames = attributes(mat_R)$dimnames)
 
 xAxis_title <- "Varimax Rotated Correlation"
-plot_corrXS_barchart(mat_Lrot, group_info, xAxis_title, sigNames = NULL)
+these_sigNames <- c(paste0("PC 1 (", 100 * c_vec[1], "%)\nLoadings"), paste0("PC 2 (", 100 * c_vec[2], "%)\nLoadings"))
+plot_corrXS_barchart(mat_Lrot[, 1:2], group_info, xAxis_title, sigNames = these_sigNames)
+ggsave("Macro correlations.png", width = 9, height = 7, units = "in")
 #------------------------------------------------------------------------
-# if(length(grep("share", these_fbalCols)) == 0){
-#   rm_col <- which(colnames(mat_X_in) == "kcal/capita/day Pulses")
-# }else{
-#   rm_col <- which(colnames(mat_X_in) == "kcal share Pulses")
-# }
-mat_X_in2 <- mat_X_in[, -rm_col]
-list_out <- get_S_and_corrXS(mat_X_in2)
-mat_S_all2 <- list_out[[1]]
-cormat_XS2 <- list_out[[2]]
-eig_values2 <- list_out[[3]]
-mat_P2 <- list_out[[4]]
-#-------------------------------------------------------------------------
-eig_values2 <- round(eigen(cor(mat_X_in2))$values, 8)
-c_vec <- eig_values2 / sum(eig_values2)
-ck_vec <- cumsum(c_vec)
-df_plot <- data.frame(Signal = paste("Signal", 1:length(eig_values2)), Portion_explained = c_vec, Portion_explained_cumul = ck_vec)
-colnames(df_plot)[2:3] <- c("Individually", "Cumulatively")
-gathercols <- colnames(df_plot)[2:3]
-df_plot <- gather_(df_plot, "Portion explained", "Value", gathercols)
-df_plot$Signal <- factor(df_plot$Signal,
-                         levels = unique(df_plot$Signal),
-                         ordered = T)
-gg <- ggplot(df_plot, aes(x = Signal, y = Value, fill = `Portion explained`))
-gg <- gg + geom_bar(stat = "identity", color = "black", position = "dodge")
-gg <- gg + scale_fill_manual(values = c("wheat3", "paleturquoise"))
-gg <- gg + geom_hline(yintercept = 0.9, color = "coral", size = 1, linetype = "dashed")
-gg <- gg + theme(axis.text.y = element_text(size = 7),
-                 axis.text.x = element_text(size = 7, angle = 60, hjust = 1),
-                 axis.title = element_blank(),
-                 legend.title = element_text(size = 8),
-                 legend.text = element_text(size = 8))
+# mat_Srot <- mat_S %*% mat_R
+# df_plot <- as.data.frame(mat_Srot)
+# gg <- ggplot(df_plot, aes(x = V1, y = V2))
+# gg <- gg + geom_point()
+# gg
+#------------------------------------------------------------------------
+mat_mod <- as.matrix(log(df[, -1]))
+row.names(mat_mod) <- df$Area
+colnames(mat_mod)
+mat_mod <- mat_mod[which(!is.infinite(mat_mod[, "Total natural resources rents (% of GDP)"])), ]
+include_vec <- c(#"Age dependency ratio, old (% of working-age population)",
+                 #"Age dependency ratio, young (% of working-age population)",
+                 #"Employment in agriculture (% of total employment) (modeled ILO estimate)",
+                 #"Employment in industry (% of total employment) (modeled ILO estimate)",
+                 #"Employment in services (% of total employment) (modeled ILO estimate)",
+  "Individuals using the Internet (% of population)",
+                 "Urban/Rural Pop.",
+                 "Agricultural land (share)",
+                 "Prod. Price Volatility (CV)",
+                 "Prod. Price Index\n(Avg. 2016-2018)",
+                 #"Food CPI Volatility (CV) 2018",
+                 #"Gross Domestic Product per capita",
+                 #"Land under permanent crops (share)",
+                 "Value Added (Agriculture, Forestry and Fishing)",
+                 "Value Added (Total Manufacturing)",
+                 "Total natural resources rents (% of GDP)",
+                 "School enrollment, secondary (% gross)",
+                 #"Life expectancy at birth, total (years)",
+                 "Ratio of female to male labor force participation rate (%) (modeled ILO estimate)",
+                 #"Proportion of seats held by women in national parliaments (%)",
+  "Income Inequality (Gini Coefficent)",
+#"Consumption Inequality",
+  #"Access to electricity (% of population)",
+  "kcal/capita/day Sugar & Sweeteners",
+  #"kcal/capita/day Starchy Roots"#,
+  #"kcal/capita/day Cereals"#,
+  "kcal/capita/day Pulses"#,
+# "kcal/capita/day Oilcrops"
+#"kcal/capita/day Animal Products"
+                 )
+df_mod <- data.frame(y = mat_mod[, "Gross Domestic Product per capita"],
+                     mat_mod[, which(colnames(mat_mod) %in% include_vec)])
 
-gg
-#----------------------------------------------------------------------------
-n_signals <- which(ck_vec > 0.9)[1]
-n_signals
-#----------------------------------------------------------------------------
-mat_S2 <- mat_S_all2[, 1:n_signals]
-mat_L2 <- cormat_XS2[, 1:n_signals]
-#------------------------------------------------------------------------
-mat_Lrot2 <- varimax(mat_L2)[[1]]
-mat_Lrot2 <- matrix(as.numeric(mat_Lrot2),
-                   attributes(mat_Lrot2)$dim,
-                   dimnames = attributes(mat_Lrot2)$dimnames)
-mat_R2 <- varimax(mat_L2)[[2]]
-mat_R2 <- matrix(as.numeric(mat_R2),
-                attributes(mat_R2)$dim,
-                dimnames = attributes(mat_R2)$dimnames)
+colnames(df_mod)[-1] <- colnames(mat_mod[, which(colnames(mat_mod) %in% include_vec)])
 
-xAxis_title <- "Varimax Rotated Correlation"
-plot_corrXS_barchart(mat_Lrot2, group_info, xAxis_title, sigNames = NULL)
-#------------------------------------------------------------------------
-mat_Srot2 <- mat_S2 %*% mat_R2
-#mat_Srot2 <- mat_Srot2[, -ncol(mat_Srot2)]
-if(length(grep("share", these_fbalCols)) == 0){
-  df_mod <- data.frame(y = df$`kcal/capita/day Pulses`, mat_S2rot)
-}else{
-  df_mod <- data.frame(y = df$`kcal share Pulses`, mat_S2rot)
-}
-mod <- lm( y ~., data = df_mod, singular.ok = T)
+mod <- lm(y ~., data = df_mod)
 summary(mod)
-# car::vif(mod)
+stargazer::stargazer(mod, type = "html", out = "mod.html")
+
+
+plot(df$`kcal/capita/day Animal Products`, df$`Age dependency ratio, old (% of working-age population)`)
+
+u <- car::vif(mod)
+u[which(u > 5)]
 # alias(mod)
 #colnames(mat_X_in)
 out_PCA <- FactoMineR::PCA(mat_X_in)
 factoextra::fviz_pca_biplot(out_PCA)
-df_PCA <- df[, -1]
-#df_PCA$`kcal share Fruits/Veg.` <- NULL
-#df_PCA$`kcal share Animal Products` <- NULL
-#df_PCA$`kcal share Other` <- NULL
-mod_pcr <- pls::pcr(Pulses ~., data = df_PCA, scale = TRUE, validation = "CV")
-summary(mod_pcr)
-pls::predplot(mod_pcr)
-pls::coefplot(mod_pcr)  
-#pls::validationplot(mod_pcr)
-#hist(df$`kcal/capita/day Pulses`)
-#hist(df$`kcal share Pulses`)
-
+#df_PCA <- df[, -1]
 
 cormat <- cor(df[, -1])
 plot_covmat(cormat, fig_title = "Correlation Matrix")
-PerformanceAnalytics::chart.Correlation(df[, -1], histogram=TRUE, pch=19)
+PerformanceAnalytics::chart.Correlation(log(df[, -1]), histogram=TRUE, pch=19)
