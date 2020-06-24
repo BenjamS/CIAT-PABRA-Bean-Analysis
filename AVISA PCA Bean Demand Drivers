@@ -114,7 +114,7 @@ gg
 df_fbal <- subset(df_fbal, Year == 2017)
 df_fbal <- df_fbal %>% group_by(Area, Item) %>%
   mutate(`kcal/capita/day pct. diff.` = diff(`kcal/capita/day`) / `kcal/capita/day`)
-  
+
 df_fbal_kcal <- df_fbal[, c("Area", "Item", "kcal/capita/day")]
 df_fbal_kcalShare <- df_fbal[, c("Area", "Item", "kcal share")]
 df_fbal_kcalTot <- df_fbal[-which(duplicated(df_fbal$`Grand Total`)), c("Area", "Grand Total")]
@@ -204,7 +204,7 @@ item_vec <- c("Sugar cane", "Pulses, Total", "Roots and Tubers, Total",
               "Vegetables Primary", "Meat, Total", "Milk, Total",
               "Fruit excl Melons, Total")
 df_pPrice <- subset(df_raw_pPrice, Item %in% item_vec &
-                          Element == "Producer Price Index (2014-2016 = 100)")
+                      Element == "Producer Price Index (2014-2016 = 100)")
 df_pPrice <- df_pPrice[which(!is.na(df_pPrice$Value)), ]
 df_pPrice <- df_pPrice %>% group_by(Area, Item) %>%
   mutate(n_yrs = length(Value)) %>% as.data.frame()
@@ -318,7 +318,7 @@ item_vec <- c("Gross Domestic Product per capita",
               "Value Added (Total Manufacturing)")
 this_element <- "Value US$, 2015 prices"
 df_macro <- subset(df_raw_macro, Item %in% item_vec &
-                       Year %in% year_vec &
+                     Year %in% year_vec &
                      Element == this_element)
 # df_macro<- df_macro %>% group_by(Area, Item) %>%
 #   summarise(Value = mean(Value, na.rm = T))
@@ -491,7 +491,7 @@ this_item <- "Agricult.Products, Total"
 element_vec <- c("Import Unit/Value Index (2004-2006 = 100)",
                  "Export Unit/Value Index (2004-2006 = 100)")
 df_trade <- subset(df_raw_trade, Element %in% element_vec &
-                   Year %in% these_years &
+                     Year %in% these_years &
                      Item == this_item)
 df_trade$Unit <- NULL
 df_trade <- df_trade %>% group_by(Area, Element) %>%
@@ -544,12 +544,12 @@ item_vec <- c("Country area",
               "Agricultural land",
               "Land under permanent crops",
               "Forest land")#,
-              # "Cropland area under conservation tillage",
-              # "Cropland area under zero or no tillage",
-              # "Land area actually irrigated")
+# "Cropland area under conservation tillage",
+# "Cropland area under zero or no tillage",
+# "Land area actually irrigated")
 df_landUse <- subset(df_raw_landUse, Element == this_element &
-                     Year %in% these_years &
-                     Item %in% item_vec)
+                       Year %in% these_years &
+                       Item %in% item_vec)
 df_landUse$Element <- NULL
 df_landUse$Unit <- NULL
 #df_landUse$Year <- NULL
@@ -663,38 +663,44 @@ rm(df_raw); gc()
 #============================================================================
 #============================================================================
 # Define function to calculate variable-signal correlations
-get_S_and_corrXS <- function(mat_X_in){
+get_S_and_corrXS <- function(mat_X_in, scale = T){
   # mat_P = eigenvectors of the data correlation matrix
   # mat_G = corresponding eigenvalues
-  mat_X_centered <- scale(mat_X_in, scale = F)
+  if(scale){
+    # Scale and center data
+    mat_X <- scale(mat_X_in)
+  }else{
+    # Center only
+    mat_X <- scale(mat_X_in, scale = F)
+  }
   # out_svd <- svd(mat_X_centered)
   # sing_values <- out_svd$d
   # n_obs <- nrow(mat_X_centered)
   # eig_values <- sing_values^2 / (n_obs - 1)
   # mat_P <- out_svd$v
   
-  #mat_P <- eigen(cov(mat_X_in))$vectors
-  mat_P <- eigen(cor(mat_X_in))$vectors
+  #mat_P <- eigen(cov(mat_X))$vectors
+  mat_P <- eigen(cor(mat_X))$vectors
   if(mean(mat_P[, 1]) < 0){mat_P <- -mat_P}
-  #eig_values <- round(eigen(cov(mat_X_in))$values, 8)
-  eig_values <- round(eigen(cor(mat_X_in))$values, 8)
+  #eig_values <- round(eigen(cov(mat_X))$values, 8)
+  eig_values <- round(eigen(cor(mat_X))$values, 8)
   mat_G <- diag(eig_values)
   
   #mat_P_sigs <- mat_P[, 1:n_signals]
   # eig_values[1:n_signals] / eigen(cov(mat_X_centered))$values[1:n_signals] #check
-  # mat_P / eigen(cov(mat_X_in))$vectors #check
+  # mat_P / eigen(cov(mat_X))$vectors #check
   
   #mat_G <- diag(eig_values)
   
   #mat_G_sigs <- matU[, 1:n_signals]
   #---------------------------------------------
-  # sd_X <- apply(mat_X_in, 2, sd)
+  # sd_X <- apply(mat_X, 2, sd)
   # D_sdX_inv <- diag(1 / sd_X)
   # cormat_XS <- D_sdX_inv %*% mat_P %*% sqrt(mat_G)
   cormat_XS <- mat_P %*% sqrt(mat_G)
-  row.names(cormat_XS) <- colnames(mat_X_in)
+  row.names(cormat_XS) <- colnames(mat_X)
   mat_L <- cormat_XS
-  #mat_L <- diag(1 / apply(mat_X_in, 2, sd)) %*% mat_P %*% sqrt(mat_G)
+  #mat_L <- diag(1 / apply(mat_X, 2, sd)) %*% mat_P %*% sqrt(mat_G)
   #---------------------------------------------------------
   # Set sign of eigenvectors such that signals best conform to their most highly correlated items
   # First have to get average of highest correlated items for each signal
@@ -708,16 +714,15 @@ get_S_and_corrXS <- function(mat_X_in){
       ind_tracks <- which(abs(this_loadvec) == max(abs(this_loadvec)))
     }
     if(length(ind_tracks) == 1){
-      list_X_hiCorr_avg[[i]] <- mat_X_centered[, ind_tracks]
+      list_X_hiCorr_avg[[i]] <- mat_X[, ind_tracks]
     }else{
       loadvec_kept <- this_loadvec[ind_tracks]
-      list_X_hiCorr_avg[[i]] <- rowMeans(mat_X_centered[, ind_tracks])
+      list_X_hiCorr_avg[[i]] <- rowMeans(mat_X[, ind_tracks])
       
     }
   }
   mat_X_hiCorr_avg <- do.call(cbind, list_X_hiCorr_avg)
-  mat_S_all <- mat_X_centered %*% mat_P
-  #mat_S_all <- mat_X_in %*% mat_P
+  mat_S_all <- mat_X %*% mat_P
   for(i in 1:n_items){
     this_S <- mat_S_all[, i]
     this_X_hiCorr_avg <- mat_X_hiCorr_avg[, i]
@@ -729,37 +734,158 @@ get_S_and_corrXS <- function(mat_X_in){
   }
   #cormat_XS <- D_sdX_inv %*% mat_P %*% sqrt(mat_G)
   cormat_XS <- mat_P %*% sqrt(mat_G)
-  row.names(cormat_XS) <- colnames(mat_X_in)
+  row.names(cormat_XS) <- colnames(mat_X)
   mat_L <- cormat_XS
-  mat_S_all <- mat_X_centered %*% mat_P
   #---------------------------------------------
-  # res <- FactoMineR::PCA(mat_pctDiff_in, scale.unit = F, ncp = ncol(mat_pctDiff_in), graph = F)
+  # Check
+  # if(scale){scale_unit <- T}else{scale_unit <- F}
+  # res <- FactoMineR::PCA(mat_X_in, scale.unit = scale_unit, ncp = ncol(mat_X_in), graph = F)
   # mat_L_FactoMiner <- res$var$coord
-  # mat_L / mat_L_FactoMiner
-  
+  # mat_L[, 1] / mat_L_FactoMiner[, 1]
+  #---------------------------------------------
   list_out <- list(mat_S_all, cormat_XS, eig_values, mat_P)
   return(list_out)
 }
 #====================================================
 # Barchart of variable-signal correlations
-plot_corrXS_barchart <- function(mat_L, group_info = NULL, xAxis_title = NULL, sigNames = NULL){
-  
-  n_signals <- ncol(mat_L)
-  df_plot <- data.frame(Item = row.names(mat_L), mat_L)
-  df_plot$Item <- as.character(df_plot$Item)
-  #-------------------------------------------------------
+plot_corrXS_barchart <- function(mat_X_in, pct_explain = 90,
+                                 n_signals_expln = NULL,
+                                 n_signals_disp = 2,
+                                 include_pctgExplnd = T,
+                                 varimaxRot = T,
+                                 group_info = NULL,
+                                 sigNames = NULL){
+  #----------------------------------------------------------------------
+  # Set value for EITHER pct_explain or n_signals_expln, not both.
+  # One or the other should be NULL.
+  # (If both have values, pct_explain overrides.)
+  # n_signals_disp is the number of signals to be displayed in graphic.
+  #----------------------------------------------------------------------
+  eig_values <- round(eigen(cor(mat_X_in))$values, 8)
+  c_vec <- round(eig_values / sum(eig_values), 4)
+  #----------------------------------------------------------------------
+  if(!is.null(pct_explain)){
+    ck_vec <- cumsum(c_vec)
+    n_signals_expln <- which(ck_vec > 10^-2 * pct_explain)[1]
+  }
+  #----------------------------------------------------------------------
+  mat_P <- eigen(cor(mat_X_in))$vectors
+  if(mean(mat_P[, 1]) < 0){mat_P <- -mat_P}
+  mat_G <- diag(eig_values)
+  #----------------------------------------------------------------------
+  # Set sign of eigenvectors such that signals best conform to
+  # their most highly correlated items
+  #---
+  # First have to get average of highest correlated items for each signal
+  corrThresh <- 0.55
+  n_items <- ncol(mat_L)
+  list_X_hiCorr_avg <- list()
+  for(i in 1:n_items){
+    this_loadvec <- mat_L[, i]
+    ind_tracks <- which(abs(this_loadvec) >= corrThresh)
+    if(length(ind_tracks) == 0){
+      ind_tracks <- which(abs(this_loadvec) == max(abs(this_loadvec)))
+    }
+    if(length(ind_tracks) == 1){
+      list_X_hiCorr_avg[[i]] <- mat_X[, ind_tracks]
+    }else{
+      loadvec_kept <- this_loadvec[ind_tracks]
+      list_X_hiCorr_avg[[i]] <- rowMeans(mat_X[, ind_tracks])
+      
+    }
+  }
+  mat_X_hiCorr_avg <- do.call(cbind, list_X_hiCorr_avg)
+  mat_S_all <- mat_X %*% mat_P
+  #---
+  for(i in 1:n_items){
+    this_S <- mat_S_all[, i]
+    this_X_hiCorr_avg <- mat_X_hiCorr_avg[, i]
+    mse <- mean((this_S - this_X_hiCorr_avg)^2)
+    mse_neg <- mean((-this_S - this_X_hiCorr_avg)^2)
+    if(mse_neg < mse){
+      print("Changing eigenvector sign.")
+      mat_P[, i] <- -mat_P[, i]
+    }
+  }
+  #----------------------------------------------------------------------
+  cormat_XS <- mat_P %*% sqrt(mat_G)
+  row.names(cormat_XS) <- colnames(mat_X)
+  mat_L <- cormat_XS
+  #----------------------------------------------------------------------
+  # Get statistical significance info
+  out_PCA <- FactoMineR::PCA(mat_X_in, scale.unit = T, ncp = n_signals_expln, graph = F)
+  list_dimdesc <- FactoMineR::dimdesc(out_PCA,
+                                      axes = c(1:n_signals_expln),
+                                      proba = 1)
+  list_matL <- list()
+  list_matpVal <- list()
+  for(i in 1:n_signals_expln){
+    list_matL[[i]] <- plyr::join_all(list_dimdesc[[i]])[, 1]
+    list_matpVal[[i]] <- plyr::join_all(list_dimdesc[[i]])[, 2]
+  }
+  mat_pVals <- do.call(cbind, list_matpVal)
+  #---
+  # Check loadings
+  # mat_L_facto <- do.call(cbind, list_matL)
+  # mat_L_facto[, 1] / mat_L[, 1]
+  # out_PCA$var$coord[, 1] / mat_L[, 1]
+  #-----------------------------------------------------------------------
+  # Convert p-values to statistical significance scale between 0 and 1
+  get_statSignifScale <- function(u){
+    u <- log(1 / u)
+    u <- (u - min(u)) / (max(u) - min(u))
+    return(u)
+  }
+  mat_statSignif <- apply(mat_pVals, 2, get_statSignifScale)
+  #-----------------------------------------------------------------------
+  if(varimaxRot){
+    mat_Lrot <- varimax(mat_L)[[1]]
+    mat_Lrot <- matrix(as.numeric(mat_Lrot),
+                       attributes(mat_Lrot)$dim,
+                       dimnames = attributes(mat_Lrot)$dimnames)
+    # mat_R <- varimax(mat_L)[[2]]
+    # mat_R <- matrix(as.numeric(mat_R),
+    #                 attributes(mat_R)$dim,
+    #                 dimnames = attributes(mat_R)$dimnames)
+    norm_m1to1 <- function(u){
+      u <- 2 * (u - min(u)) / (max(u) - min(u)) - 1
+      return(u)
+      }
+    for(i in 1:n_signals_disp){
+      u <- mat_Lrot[, i]
+      if(max(u) > 1.1 | min(u) < -1.1){
+        mat_Lrot[, i] <- norm_m1to1(u)
+      }
+    }
+    mat_L <- mat_Lrot
+    xAxis_title <- "Correlations (Varimax Rotated)"
+  }else{
+    xAxis_title <- "Correlations"
+  }
+  #-----------------------------------------------------------------------
+  df_L <- data.frame(Item = row.names(mat_L), mat_L[, 1:n_signals_disp])
+  df_L$Item <- as.character(df_L$Item)
+  df_statSignif <- data.frame(Item = row.names(mat_statSignif), mat_statSignif[, 1:n_signals_disp])
+  df_statSignif$Item <- as.character(df_statSignif$Item)
+  #-----------------------------------------------------------------------
   if(is.null(sigNames)){
-    signal_id <- paste("Signal", 1:n_signals)
+    signal_id <- paste("PC", 1:n_signals_disp)
   }else{
     signal_id <- sigNames
   }
-  colnames(df_plot)[2:(n_signals + 1)] <- signal_id
   #-------------------------------------------------------
-  gathercols <- as.character(signal_id) 
-  df_plot <- gather_(df_plot, "Signal", "Correlation", gathercols)
-  df_plot <- transform(df_plot,
-                       Signal = factor(Signal, levels = gathercols))
-  
+  if(include_pctgExplnd){
+    signal_id <- paste0(signal_id, "\n(", 10^2 * c_vec[1:n_signals_disp], "%)")
+  }
+  #-------------------------------------------------------
+  colnames(df_L)[2:(n_signals_disp + 1)] <- signal_id
+  colnames(df_statSignif)[2:(n_signals_disp + 1)] <- signal_id
+  #-------------------------------------------------------
+  gathercols <- as.character(signal_id)
+  df_plot <- gather_(df_L, "Signal", "Correlation", gathercols)
+  df_statSignif <- gather_(df_statSignif, "Signal", "Statistical\nsignificance", gathercols)
+  df_plot <- merge(df_plot, df_statSignif, by = c("Item", "Signal"))
+  df_plot$Signal <- factor(df_plot$Signal, levels = gathercols)
   if(!is.null(group_info)){
     outlist <- group_fn(group_info)
     cols_ordered_by_group <- outlist[[1]]
@@ -769,21 +895,21 @@ plot_corrXS_barchart <- function(mat_L, group_info = NULL, xAxis_title = NULL, s
     df_plot <- merge(df_plot, df_match_group, by = "Item")
     df_plot <- df_plot[order(df_plot$Group), ]
     df_plot$Item <- factor(df_plot$Item, levels = unique(df_plot$Item))
-    gg <- ggplot(df_plot, aes(x = Item, y = Correlation, fill = Group))
+    gg <- ggplot(df_plot, aes(x = Item, y = Correlation,
+                              fill = Group, alpha = `Statistical\nsignificance`))
     gg <- gg + scale_fill_manual(values = unique(group_color_vec))
   }else{
-    gg <- ggplot(df_plot, aes(x = Item, y = Correlation))
+    gg <- ggplot(df_plot, aes(x = Item, y = Correlation, alpha = `Statistical\nsignificance`))
   }
-  gg <- gg + geom_bar(stat = "identity", color = "black", position = "dodge")
+  gg <- gg + geom_bar(stat = "identity", color = "grey", position = "dodge")
   gg <- gg + ylim(limits = c(-1, 1))
   gg <- gg + facet_wrap(~ Signal, nrow = 1)
-  if(!is.null(xAxis_title)){
-    gg <- gg + labs(y = xAxis_title)
-  }
+  gg <- gg + labs(y = xAxis_title)
+  gg <- gg + theme_bw()
   gg <- gg + theme(axis.text = element_text(size = 8),
                    axis.title.x = element_text(size = 8),
                    axis.title.y = element_blank(),
-                   legend.title = element_blank(),
+                   #legend.title = element_blank(),
                    legend.text = element_text(size = 8),
                    strip.text = element_text(size = 8))
   gg <- gg + coord_equal()
@@ -791,6 +917,7 @@ plot_corrXS_barchart <- function(mat_L, group_info = NULL, xAxis_title = NULL, s
   gg
   
 }
+ggsave("Macro driver correlations.png")
 #=====================================================================
 # Define function to order data by group
 group_fn <- function(group_info){
@@ -840,8 +967,6 @@ if(length(grep("share", these_fbalCols)) == 0){
   this_df_fbal$`kcal share Other` <- NULL
   this_df_fbal[this_df_fbal == 0] <- 0.001
 }
-#this_df_fbal[, -1] <- log(this_df_fbal[, -1])
-#this_df_fbal$`kcal share Other` <- NULL
 #this_df_pPrice <- df_pPrice[, c("Area", "Prod. Price Volatility (CV)")]
 this_df_pPrice <- df_pPrice
 this_df_pop <- df_pop[, c("Area", "Urban/Rural Pop.")]
@@ -893,7 +1018,7 @@ for(i in 1:length(list_df)){
   
   print(this_df$Area[grep("China", this_df$Area, ignore.case = T)])
   
-#  print(which(duplicated(this_df$Area)))
+  #  print(which(duplicated(this_df$Area)))
   
   list_df[[i]] <- this_df
 }
@@ -976,13 +1101,22 @@ gg
 n_signals <- which(ck_vec > 0.9)[1]
 n_signals
 #----------------------------------------------------------------------------
-list_out <- get_S_and_corrXS(mat_X_in)
+plot_corrXS_barchart(mat_X_in, pct_explain = 90,
+                                 n_signals_expln = NULL,
+                                 n_signals_disp = 4,
+                                 include_pctgExplnd = T,
+                                 varimaxRot = T,
+                                 group_info = group_info,
+                                 sigNames = NULL)
+ggsave("")
+
+list_out <- get_S_and_corrXS(mat_X_in, scale = T)
 mat_S_all <- list_out[[1]]
 cormat_XS <- list_out[[2]]
 eig_values <- list_out[[3]]
 mat_P <- list_out[[4]]
 mat_S <- mat_S_all[, 1:n_signals]
-mat_L <- cormat_XS[, 1:n_signals]
+mat_Ltest <- cormat_XS[, 1:n_signals]
 plot_corrXS_barchart(mat_L[, 1:2], group_info)
 #------------------------------------------------------------------------
 mat_Lrot <- varimax(mat_L)[[1]]
@@ -997,48 +1131,48 @@ mat_R <- matrix(as.numeric(mat_R),
 xAxis_title <- "Varimax Rotated Correlation"
 these_sigNames <- c(paste0("PC 1 (", 100 * c_vec[1], "%)\nLoadings"), paste0("PC 2 (", 100 * c_vec[2], "%)\nLoadings"))
 plot_corrXS_barchart(mat_Lrot[, 1:2], group_info, xAxis_title, sigNames = these_sigNames)
-ggsave("Macro correlations.png", width = 9, height = 7, units = "in")
+ggsave("Macro driver correlations.png", width = 9, height = 7, units = "in")
 #------------------------------------------------------------------------
-# mat_Srot <- mat_S %*% mat_R
-# df_plot <- as.data.frame(mat_Srot)
-# gg <- ggplot(df_plot, aes(x = V1, y = V2))
-# gg <- gg + geom_point()
-# gg
+mat_Srot <- mat_S %*% mat_R
+df_plot <- as.data.frame(mat_Srot)
+gg <- ggplot(df_plot, aes(x = V1, y = V2))
+gg <- gg + geom_point()
+gg
 #------------------------------------------------------------------------
 mat_mod <- as.matrix(log(df[, -1]))
 row.names(mat_mod) <- df$Area
 colnames(mat_mod)
 mat_mod <- mat_mod[which(!is.infinite(mat_mod[, "Total natural resources rents (% of GDP)"])), ]
 include_vec <- c(#"Age dependency ratio, old (% of working-age population)",
-                 #"Age dependency ratio, young (% of working-age population)",
-                 #"Employment in agriculture (% of total employment) (modeled ILO estimate)",
-                 #"Employment in industry (% of total employment) (modeled ILO estimate)",
-                 #"Employment in services (% of total employment) (modeled ILO estimate)",
+  #"Age dependency ratio, young (% of working-age population)",
+  #"Employment in agriculture (% of total employment) (modeled ILO estimate)",
+  #"Employment in industry (% of total employment) (modeled ILO estimate)",
+  #"Employment in services (% of total employment) (modeled ILO estimate)",
   "Individuals using the Internet (% of population)",
-                 "Urban/Rural Pop.",
-                 "Agricultural land (share)",
-                 "Prod. Price Volatility (CV)",
-                 "Prod. Price Index (Avg. 2016-2018)",
-                 #"Food CPI Volatility (CV) 2018",
-                 #"Gross Domestic Product per capita",
-                 #"Land under permanent crops (share)",
-                 #"Value Added (Agriculture, Forestry and Fishing)",
-                 "Value Added (Total Manufacturing)",
-                 "Total natural resources rents (% of GDP)",
-                 "School enrollment, secondary (% gross)",
-                 #"Life expectancy at birth, total (years)",
-                 "Ratio of female to male labor force participation rate (%) (modeled ILO estimate)",
-                 #"Proportion of seats held by women in national parliaments (%)",
-"Income Inequality (Gini Coefficient)",
-#"Consumption Inequality (Gini Coefficient)",
+  "Urban/Rural Pop.",
+  "Agricultural land (share)",
+  "Prod. Price Volatility (CV)",
+  "Prod. Price Index (Avg. 2016-2018)",
+  #"Food CPI Volatility (CV) 2018",
+  #"Gross Domestic Product per capita",
+  #"Land under permanent crops (share)",
+  #"Value Added (Agriculture, Forestry and Fishing)",
+  "Value Added (Total Manufacturing)",
+  "Total natural resources rents (% of GDP)",
+  "School enrollment, secondary (% gross)",
+  #"Life expectancy at birth, total (years)",
+  "Ratio of female to male labor force participation rate (%) (modeled ILO estimate)",
+  #"Proportion of seats held by women in national parliaments (%)",
+  "Income Inequality (Gini Coefficient)",
+  #"Consumption Inequality (Gini Coefficient)",
   #"Access to electricity (% of population)",
   "kcal/capita/day Sugar & Sweeteners",
   #"kcal/capita/day Starchy Roots",
   #"kcal/capita/day Cereals",
   "kcal/capita/day Pulses"#,
-# "kcal/capita/day Oilcrops"
-#"kcal/capita/day Animal Products"
-                 )
+  # "kcal/capita/day Oilcrops"
+  #"kcal/capita/day Animal Products"
+)
 
 #Alternative model: remove kcal sugar and income inequality or replace them with kcal animal products
 
@@ -1047,22 +1181,54 @@ df_mod <- data.frame(y = mat_mod[, "Gross Domestic Product per capita"],
 
 colnames(df_mod)[-1] <- colnames(mat_mod[, which(colnames(mat_mod) %in% include_vec)])
 
+colnames(df_mod)[grep("Ratio of female to male", colnames(df_mod))] <-
+  "Ratio female to male employment (%)"
+colnames(df_mod)[grep("Internet", colnames(df_mod))] <-
+  "Pop. using internet (%)"
+
 mod <- lm(y ~., data = df_mod)
 summary(mod)
 broom::tidy(mod)
 plot(mod$fitted.values, mod$residuals)
 hist(df_mod$y)
 
-#plot(df$`kcal/capita/day Animal Products`, df$`Age dependency ratio, old (% of working-age population)`)
-
 u <- car::vif(mod)
 u[which(u > 5)]
 # alias(mod)
 #colnames(mat_X_in)
-out_PCA <- FactoMineR::PCA(mat_X_in)
-factoextra::fviz_pca_biplot(out_PCA)
-#df_PCA <- df[, -1]
+out_PCA <- FactoMineR::PCA(mat_X_in, ncp = n_signals)
+factoextra::fviz_pca_biplot(out_PCA,
+                            gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+                            col.ind = "cos2",
+                            repel = T)
+factoextra::fviz_pca_ind(out_PCA,
+                         gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+                         col.ind = "cos2",
+                         repel = T)
 
-cormat <- cor(df[, -1])
-plot_covmat(cormat, fig_title = "Correlation Matrix")
-PerformanceAnalytics::chart.Correlation(log(df[, -1]), histogram=TRUE, pch=19)
+out_PCA$ind$coord <- out_PCA$ind$coord %*% mat_R
+
+factoextra::fviz_pca_ind(out_PCA,
+                         gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+                         col.ind = "cos2",
+                         repel = T)
+
+
+out_PCA <- FactoMineR::PCA(mat_X_in, ncp = n_signals)
+
+list_dimdesc <- FactoMineR::dimdesc(out_PCA, axes=c(1,2), proba = 1)
+mat_L1 <- plyr::join_all(list_dimdesc[[1]])
+mat_L2 <- plyr::join_all(list_dimdesc[[2]])
+
+mat_pVals <- as.matrix(data.frame(mat_L1[, 2], mat_L1[, 1]))
+mat_L <- cbind(mat_L1[, 1], mat_L2[, 1])
+plot_corrXS_barchart(mat_L, group_info)
+
+
+#mat_S[, 1] / out_PCA$ind$coord[, 1]
+#plot(mat_S[, 1], mat_S[, 2])
+
+
+# cormat <- cor(df[, -1])
+# plot_covmat(cormat, fig_title = "Correlation Matrix")
+# PerformanceAnalytics::chart.Correlation(log(df[, -1]), histogram=TRUE, pch=19)
