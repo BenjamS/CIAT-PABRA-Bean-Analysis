@@ -1,5 +1,27 @@
 library(tidyverse)
 library(circlize)
+#=======================================================================
+shift_legend2 <- function(p) {
+  # ...
+  # to grob
+  gp <- ggplotGrob(p)
+  facet.panels <- grep("^panel", gp[["layout"]][["name"]])
+  empty.facet.panels <- sapply(facet.panels, function(i) "zeroGrob" %in% class(gp[["grobs"]][[i]]))
+  empty.facet.panels <- facet.panels[empty.facet.panels]
+  
+  # establish name of empty panels
+  empty.facet.panels <- gp[["layout"]][empty.facet.panels, ]
+  names <- empty.facet.panels$name
+  # example of names:
+  #[1] "panel-3-2" "panel-3-3"
+  
+  # now we just need a simple call to reposition the legend
+  #lemon::reposition_legend(p, 'center', panel=names)
+  p_out <- lemon::reposition_legend(p, 'center', panel=names)
+  #class(lemon::reposition_legend(p, 'center', panel=names))
+  return(p_out)
+}
+#=======================================================================
 
 df_raw <- read.csv("SA_TradeFlowQuantity.csv", stringsAsFactors = F)
 colnames(df_raw)
@@ -23,13 +45,35 @@ df$Destination[grep("Tanzania", u)] <- "Tanzania"
 #===========================================================================
 df_circle <- df %>% group_by(reporting_country, Destination, Year) %>%
   summarise(`Bean Exports (kg.)` = sum(`Bean Exports (kg.)`, na.rm = T))
-df_circle <- subset(df_circle, Year == 2015)
-df_circle$Year <- NULL
+df_circle <- subset(df_circle, Year %in% as.character(c(2011:2015)))
+df_circle <- df_circle %>% group_by(reporting_country, Destination) %>%
+  summarize(`Bean Exports (kg.)` = sum(`Bean Exports (kg.)`, na.rm = T))
+df_circle$`Bean Exports (kg.)` <- df_circle$`Bean Exports (kg.)` / 1000
+colnames(df_circle)[ncol(df_circle)] <- "Bean exports (metric tons)"
 
-png("my_plot.png") 
-chordDiagram(df_circle, directional = 1, direction.type = c("diffHeight", "arrows"),
-             link.arr.col = arr.col, link.arr.length = 0.2)
-title(main = "2015 Southern Africa Bean Trade Flows (FEWS data)")
+n <- length(unique(df_circle$reporting_country))
+bag_of_colors <- randomcoloR::distinctColorPalette(k = n)
+these_colors <- sample(bag_of_colors, n)
+names(these_colors) <- unique(df_circle$reporting_country)
+
+png("FEWS bean trade chord diagram.png", width = 8, height = 8, units = "in", res = 300) 
+chordDiagram(df_circle, grid.col = these_colors, directional = 1, 
+             direction.type = c("diffHeight", "arrows"),
+             link.arr.type = "big.arrow",
+             link.lwd = 1, link.lty = 1, link.border = "black",
+             annotationTrack = "grid",
+             preAllocateTracks = list(track.height = 0.3))
+circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
+  xlim = get.cell.meta.data("xlim")
+  ylim = get.cell.meta.data("ylim")
+  sector.name = get.cell.meta.data("sector.index")
+  circos.text(mean(xlim), ylim[1] + .1, sector.name, facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.5))
+  circos.axis(h = "top", labels.cex = 0.5, major.tick.percentage = 0.2, sector.index = sector.name, track.index = 2)
+}, bg.border = NA)
+mytitle1 = "Southern Africa Cross-Border Bean Exports (Metric Tons), 2011-2015"
+mytitle2 = "FEWS data"
+mtext(side=3, line = -2, adj=0, cex=1.2, mytitle1)
+mtext(side=3, line = -3, adj=0, cex=1, mytitle2)
 dev.off()
 #===========================================================================
 df_kgPerMonth <- subset(df, Year >= 2010)
@@ -72,17 +116,23 @@ df_evolut <- df#subset(df, reporting_country != "South Africa")
 df_evolut <- df_evolut %>% group_by(reporting_country, Destination, Year) %>%
   summarise(`Bean Exports (kg.)` = sum(`Bean Exports (kg.)`, na.rm = T))
 df_plot <- df_evolut
+df_plot$`Bean Exports (kg.)` <- df_plot$`Bean Exports (kg.)` / 1000
+colnames(df_plot)[ncol(df_plot)] <- "Bean exports (metric tons)"
 n <- length(unique(df_plot$Destination))
 bag_of_colors <- randomcoloR::distinctColorPalette(k = 2 * n)
 these_colors <- sample(bag_of_colors, n)
-gg <- ggplot(df_plot, aes(x = Year, y = `Bean Exports (kg.)`, fill = Destination))
+gg <- ggplot(df_plot, aes(x = Year, y = `Bean exports (metric tons)`, fill = Destination))
 gg <- gg + geom_area(position = "stack")
 gg <- gg + scale_fill_manual(values = these_colors)
 gg <- gg + scale_x_continuous(breaks = seq(2005, 2015, length.out = 6))
 gg <- gg + facet_wrap(~reporting_country, ncol = 2, scales = "free_y")
-gg <- gg + labs(caption = "Source: FEWS")
+gg <- gg + labs(title = "Where are the beans going? (FEWS Data)")
 gg <- gg + theme(axis.title.x = element_blank(),
-                 legend.position = "top")
+                 legend.position = "bottom",
+                 legend.title = element_blank())
+gg <- gg + guides(fill = guide_legend(nrow = 3))
+gg <- shift_legend2(gg)
+gg <- ggplotify::as.ggplot(gg)
 gg
-ggsave("Trade evolution.png", height = 5)
+ggsave("FEWS Where are the beans going.png", width = 7, height = 5.5)
 #===========================================================================
