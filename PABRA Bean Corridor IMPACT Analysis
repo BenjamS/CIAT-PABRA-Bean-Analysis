@@ -1,9 +1,10 @@
 ---
 title: "PABRA Bean Corridor IMPACT Analysis 2020-2050 (Draft)"
-author: "Ben Schiek, Camila Bonilla"
+author: "Ben Schiek, Camila Bonilla, Steven Prager"
 date:  "`r Sys.Date()`"
 bibliography: PABRA Bean Corridor IMPACT Analysis.bib
 numbersections: true
+always_allow_html: true
 output:
   word_document:
     toc: true
@@ -17,6 +18,11 @@ knitr::opts_chunk$set(echo = FALSE,
                       warning = FALSE)
 library(tidyverse)
 #library(patchwork)
+library(kableExtra)
+library(raster)
+library(rgdal)
+library(flextable)
+library(officer)
 #===========================================================================
 shift_legend2 <- function(p) {
   # ...
@@ -66,7 +72,8 @@ supplyVar_vec <- c("QSupXAgg -- Commodity Supply",
                    "QSXAgg -- Total Production"
 )
 
-yieldArea_vec <- c("TYldXAgg -- Total Yield",
+yieldArea_vec <- c("YldXAgg -- Yield",
+                   "TYldXAgg -- Total Yield",
                    "TAreaXAgg -- Total Area")
 
 trade_vec <- c("QNXAgg -- Net Trade",
@@ -95,9 +102,9 @@ WECABREN_vec <- c("SSA-Burkina Faso", "SSA-Central African Rep.",
                   "SSA-Sierra Leon", "SSA-Togo")
 these_countries <- c(ECABREN_vec, SABRN_vec, WECABREN_vec)
 #-------------------------------------------------------------------------
-#df_raw <- read.csv(rawData_filepath, stringsAsFactors = F)
-#df_raw$X <- NULL
-#unique(df_raw$region[grep("SSA", df_raw$region, ignore.case = T)])
+# df_raw <- read.csv(rawData_filepath, stringsAsFactors = F)
+# df_raw$X <- NULL
+# unique(df_raw$region[grep("SSA", df_raw$region, ignore.case = T)])
 # 
 # df <- subset(df_raw, region %in% these_countries &
 #                scenario != "NoCC" &
@@ -122,6 +129,7 @@ these_countries <- c(ECABREN_vec, SABRN_vec, WECABREN_vec)
 ECABREN_vec <- gsub("SSA-", "", ECABREN_vec)
 SABRN_vec <- gsub("SSA-", "", SABRN_vec)
 WECABREN_vec <- gsub("SSA-", "", WECABREN_vec)
+all_PABRAcountries <- unique(c(ECABREN_vec, SABRN_vec, WECABREN_vec))
 list_country_vec <- list(ECABREN_vec, SABRN_vec, WECABREN_vec)
 country_group_names <- c("ECABREN", "SABRN", "WECABREN")
 sys_vec <- c("Irrigated", "Rainfed")
@@ -132,11 +140,36 @@ df_raw <- read.csv(paste0(rawData_folder, "AVISA_0_sub_sub.csv"), stringsAsFacto
 #colnames(df_raw)
 df_raw$X <- NULL
 #unique(df_raw$Country)
+df_raw <- subset(df_raw, Scenario != "CC_NORE")
 df <- df_raw
-df_IPR <- subset(df, impactparameter == "YldInt2XAgg -- IPRs")
-colnames(df_IPR)[ncol(df_IPR)] <- "Exogenous Yield Growth Rate"
-df_IPR <- df_IPR[which(!duplicated(df_IPR$`Exogenous Yield Growth Rate`)), ]
-df_IPR$Scenario <- NULL
+#list.files("E:/BSCHIEK/IMPACT3-Model-ver3.3")
+IPRData_filepath <- "E:/BSCHIEK/IMPACT3-Model-ver3.3/SimulationsSetUp.xlsm"
+df_IPR <- readxl::read_excel(IPRData_filepath, sheet = "YieldGrPredef")
+df_IPR <- df_IPR[9:nrow(df_IPR), 2:ncol(df_IPR)]
+colnames(df_IPR) <- df_IPR[1, ]
+df_IPR <- df_IPR[-1, ]
+#unique(df_IPR$CROP)
+#unique(df_IPR$FPU)
+#unique(df_IPR$FPU[grep("ZAM", df_IPR$FPU)])
+df_IPR <- as.data.frame(df_IPR)
+df_IPR <- subset(df_IPR, CROP == "bean")
+df_isoCountryKey <- read.csv("E:/BSCHIEK/ISO.csv", stringsAsFactors = F)
+df_isoCountryKey$X <- NULL
+colnames(df_isoCountryKey) <- c("Country", "ISO")
+df_IPR$ISO <- gsub("^.*_", "", df_IPR$FPU)
+df_IPR <- merge(df_IPR, df_isoCountryKey, by = "ISO")
+df_IPR <- df_IPR[which(!duplicated(df_IPR$Country)), ]
+df_IPR <- df_IPR %>% gather(Year, IPR, `2005`:`2050`)
+df_IPR <- subset(df_IPR, Year >= 2020)
+colnames(df_IPR)[which(colnames(df_IPR) == "IPR")] <- "Exogenous Bean Yield Growth Rate"
+colnames(df_IPR)[which(colnames(df_IPR) == "LAND")] <- "System"
+df_IPR$Year <- as.integer(df_IPR$Year)
+df_IPR$`Exogenous Bean Yield Growth Rate` <- as.numeric(df_IPR$`Exogenous Bean Yield Growth Rate`)
+df_IPR$FPU <- NULL
+# df_IPR <- subset(df, impactparameter == "YldInt2XAgg -- IPRs")
+# colnames(df_IPR)[ncol(df_IPR)] <- "Exogenous Yield Growth Rate"
+# df_IPR <- df_IPR[which(!duplicated(df_IPR$`Exogenous Yield Growth Rate`)), ]
+# df_IPR$Scenario <- NULL
 #colnames(df_IPR)
 df_popGDP <- subset(df, impactparameter %in% c("pcGDPXAgg -- Per Capita Income",
                                                "PopXAgg -- Population"))
@@ -153,29 +186,31 @@ colnames(df_shockCC)[ncol(df_shockCC)] <- "CC yield shock"
 df <- subset(df, !(impactparameter %in% assump_vec))
 # unique(df$impactparameter)
 # colnames(df)
-df <- df %>% group_by(Year, System, Country, Commodity, impactparameter) %>% summarise(Val = mean(Val, na.rm = T))
+df <- df %>% group_by(Year, System, Country, Commodity, impactparameter) %>%
+  summarise(Val = mean(Val, na.rm = T))
 # unique(df$Country)
 # unique(df$Commodity)
 ```
+# Summary and purpose
+
+This document presents preliminary results of foresight analyses done in support of the AVISA project, the PABRA program in Africa, and the Alliance Bioversity CIAT bean research program more broadly.
+
+The results presented herein reflect "standard" IMPACT model runs using default assumptions regarding productivity growth rates. Likewise, the current results incorporate consideration of climate change based on the average climate impact across an ensemble of 5 climate models. The current model runs are limited to a one scenario that combines the "regional rivalry" Shared Socioeconomic Pathway  SSP3 (including a bias towards national energy and food security goals over regional and global cooperative economic growth) and a corresponding representative concentration pathway (RCP) 6.0 (which assumes emissions will increase out to 2080 before declining).
+
+Quantitative strategic foresight approaches are designed to explore plausible scenarios regarding the future. The purpose of this document is thus twofold. First, we would like to share the results and then use the same to stimulate dialog regarding major trends associated with beans throughout Africa. Second, based on the dialog, we will then incorporate key stakeholder perspectives (e.g., PABRA, the ABC bean program) into the model in the form of adjustments to some of the input assumptions.
+
+In the following sections we present the IMPACT model results for key variables and offer insights regarding the results in relation to Bean Program activities.
 
 # Supply and demand
 <!-- ## Household demand to supply ratio -->
 <!-- Supply = production + imports -->
 ## General demand profile
 
-Demand categories:
+* According to FAO, most bean demand in Sub-Saharan Africa is domestic household food demand. IMPACT projects that this trend will continue out to 2050 for both rural and urban households.
 
-* Household food demand, rural and urban: "[Household] demand is a function of the price of the commodity and the prices of other competing commodities, per capita income, and total population.... The IMPACT demand elasticities are originally based on United States Department of 
-Agriculture–estimated elasticities and adjusted to represent a synthesis of average, aggregate elasticities for each region, given the income level and distribution of urban and rural population (United States Department of Agriculture 1998). Over time the elasticities are adjusted to accommodate the gradual shift in demand from staples to high-value commodities like meat, especially in developing countries. This assumption is based on expected economic growth, increased urbanization, and continued commercialization of the agricultural sector. IMPACT is designed to simulate multiple types of households (that is, rural, urban, rich, poor, and so forth); however, currently, IMPACT treats household demand with one representative consumer per country" [@robinson2015international].
+(See Appendix for details on IMPACT demand categories.)
 
-* Export demand
-
-* Livestock feed demand: "Feed demand is a derived intermediate demand. It is determined by two components: (1) animal feed requirements determined by livestock production and livestock feed requirements and (2) price effects that take into account potential substitution possibilities among different feeds. The equation also incorporates a technology parameter that indicates improvements in feeding efficiencies over time" [@robinson2015international].
-  + "Intermediate demand is a derived demand that is based on the demand for final processed goods, such as food oils and sugar. The input-output matrix determines the proportions of inputs required for each producing activity" [@robinson2015international].
-
-* Other demand: "Other demand summarizes all other demands for agricultural products from sectors outside of the focus of IMPACT ( for example, seeds, industrial use)" [@robinson2015international].
-
-```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
+```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', ft.align = "center", echo=FALSE}
 # n <- length(unique(df$Country))
 # bag_of_colors <- randomcoloR::distinctColorPalette(k = n)
 # country_colors <- sample(bag_of_colors, n)
@@ -210,10 +245,34 @@ gg <- gg + theme(axis.title.x = element_blank(),
 gg
 
 ``` 
-
 \pagebreak 
 
+```{r, ft.align = "center", echo=FALSE}
+
+df_table <- df_plot %>% group_by(Country, Year) %>%
+  summarise(`'000 metric tons` = sum(`'000 metric tons`)) %>%
+  as.data.frame()
+df_table <- subset(df_table, Year %in% c(2020, 2050))
+df_table <- df_table %>% spread(Year, `'000 metric tons`)
+df_table$`Pct. Change` <- 100 * (df_table$`2050` - df_table$`2020`) / df_table$`2020`
+colnames(df_table)[2:3] <- c("2020 Bean demand ('000 MT)", "2050 Bean demand ('000 MT)")
+df_table[, 2:4] <- round(df_table[, 2:4], 1)
+#kable(df_table) %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+this_table <- regulartable(df_table, col_keys = colnames(df_table))
+this_table <- theme_vanilla(this_table)
+#this_table <- autofit(this_table)
+this_table <- width(this_table, width = 1.5)
+knitr::knit_print(this_table)
+
+
+```
+
 ## Protein diet demand profile
+
+* Overall protein consumption projected to increase throughout most of Sub-Saharan Africa.
+
+* Protein diet composition varies considerably from country to country. In some countries, such as South Africa, Madagascar, Zambia, and Zimbabwe, animal products constitute the main protein source. In other countries, such as Rwanda, Burundi, the DRC, Togo, and Uganda, beans are projected to constitute the main protein source.
 
 ```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
 
@@ -241,18 +300,41 @@ gg <- gg + theme(axis.title.x = element_blank(),
 gg <- gg + guides(color = guide_legend(nrow = 2))
 gg <- shift_legend2(gg)
 gg <- ggplotify::as.ggplot(gg)
-gg
+#gg
 
 ```
 \pagebreak 
 
+```{r, ft.align = "center", echo=FALSE}
+
+df_table <- df_plot
+df_table$System <- NULL
+df_table$impactparameter <- NULL
+df_table <- subset(df_table, Year %in% c(2020, 2050) &
+                     Commodity == "Beans")
+df_table$Commodity <- NULL
+df_table <- df_table %>% spread(Year, `kcal/capita/day`)
+df_table$`Pct. Change` <- 100 * (df_table$`2050` - df_table$`2020`) / df_table$`2020`
+colnames(df_table)[2:3] <- c("2020 Bean kcal/capita/day", "2050 Bean kcal/capita/day")
+df_table[, 2:4] <- round(df_table[, 2:4], 1)
+#kable(df_table) %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+this_table <- regulartable(df_table, col_keys = colnames(df_table))
+this_table <- theme_vanilla(this_table)
+#this_table <- autofit(this_table)
+this_table <- width(this_table, width = 1.5)
+knitr::knit_print(this_table)
+
+
+```
+
 ## Domestic supply profile (cropland use)
 
-"A new feature of IMPACT 3 is the implementation of a land market to manage competing demands for agricultural land from different crops, as well as providing new linkage points to land-use models that work with broader land-use changes, such as conversion of forest to grasslands and agricultural land. It also allows us to separate total area supply (irrigated and rainfed) from individual crop area demands and allows equilibrium conditions to determine the best economic use of the available land. The total supply of land is assumed to be a function of the scarcity value or shadow price index of land, which can also be considered a summary of changes in crop prices. The shadow price (WF) is indexed to 1 in the first year and changes based on changing demands from all crops for land area.... The supply of land is considered exogenous within each year, meaning that farmers are not allowed to adjust the total crop area in the middle of the year. The total land supply over time is driven by exogenous trends on the availability of area for agriculture as well as endogenous responses to changes in area demand, which is handled in between years....
+* Cropland composition varies considerably from country to country in Sub-Saharan Africa. IMPACT projects this variation to continue out to 2050.
 
-"Crop area is specified as an area demand function with respect to changes in the marginal revenue product, changes in land cost, and exogenous nonprice trends in harvested area. Crop area elasticities simulate the supply response to changes in the marginal revenue of land represented by [a function of] the interaction of the net price of an activity and the productivity of the activity in using an additional hectare of land.
+* IMPACT projects that Kenya, Uganda, Tanzania, Togo, Burundi, and Rwanda will continue to dedicate substantial cropland area to bean cultivation.
 
-"[The function includes an] exogenous trend...[that] captures changes in area resulting from factors other than direct market effects, such as government programs encouraging cropping expansion, contraction due to soil degradation, or conversion of land from agriculture to nonagricultural uses. Assumptions for exogenous trends are determined by a combination of historical changes in land use and expert judgment on potential future regional dynamics. They are represented as compound growth from the base and are applied between years. Competing demands from different crops are handled through an equilibrium equation that determines the land allocation and ensures that all crop area demand sums up to the total land supply for each [geographical unit]" [@robinson2015international].
+(See Appendix for details on IMPACT modeling of cropland use.)
 
 ```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
 
@@ -292,49 +374,70 @@ gg <- gg + theme(axis.title.x = element_blank(),
 gg <- gg + guides(color = guide_legend(nrow = 2))
 gg <- shift_legend2(gg)
 gg <- ggplotify::as.ggplot(gg)
-gg
+#gg
 
 
 
 ```
 \pagebreak
 
-## Trade as share of demand and production
+```{r, ft.align = "center", echo=FALSE}
 
-Negative values indicate import dependence to meet domestic bean demand. Positive values indicate bean exports as a share of production.
+df_table <- df_plot
+df_table <- subset(df_table, Year %in% c(2020, 2050) &
+                     Commodity == "Beans")
+df_table$Commodity <- NULL
+df_table <- df_table %>% spread(Year, `'000 hectares`)
+df_table$`Pct. Change` <- 100 * (df_table$`2050` - df_table$`2020`) / df_table$`2020`
+colnames(df_table)[2:3] <- c("2020 Bean '000 hectares", "2050 Bean '000 hectares")
+df_table[, 2:4] <- round(df_table[, 2:4], 1)
+#kable(df_table) %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
 
-```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
+this_table <- regulartable(df_table, col_keys = colnames(df_table))
+this_table <- theme_vanilla(this_table)
+#this_table <- autofit(this_table)
+this_table <- width(this_table, width = 1.5)
+knitr::knit_print(this_table)
 
-#unique(df$impactparameter)
-these_vars <- c("QESHXAgg -- Export Share of Production",
-                "QMSHXAgg -- Import Share of Demand")
-df_plot <- subset(df, impactparameter %in% these_vars &
-                    Commodity == "Beans")
-u <- df_plot$impactparameter
-df_plot$impactparameter <- gsub("^.*\\-- ", "", u)
-df_plot$Val[grep("Import", df_plot$impactparameter, ignore.case = T)] <- -df_plot$Val[grep("Import", df_plot$impactparameter, ignore.case = T)]
-these_colors <- c("green", "violet")
-colnames(df_plot)[ncol(df_plot)] <- "Share"
-gg <- ggplot(df_plot, aes(x = Year, y = Share, fill = impactparameter))
-gg <- gg + geom_area(position = "stack", alpha = 0.4)
-gg <- gg + scale_fill_manual(values = these_colors)
-gg <- gg + facet_wrap(~ Country, ncol = 5)
-gg <- gg + theme(axis.title.x = element_blank(),
-                 axis.text.x = element_text(angle = 60, hjust = 1),
-                 legend.title = element_blank(),
-                 legend.position = "bottom")
-gg
 
 ```
-\pagebreak
+<!-- ## Trade as share of demand and production -->
 
+<!-- Negative values indicate import dependence to meet domestic bean demand. Positive values indicate bean exports as a share of production. -->
+
+<!-- #```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE} -->
+
+<!-- #unique(df$impactparameter) -->
+<!-- these_vars <- c("QESHXAgg -- Export Share of Production", -->
+<!--                 "QMSHXAgg -- Import Share of Demand") -->
+<!-- df_plot <- subset(df, impactparameter %in% these_vars & -->
+<!--                     Commodity == "Beans") -->
+<!-- u <- df_plot$impactparameter -->
+<!-- df_plot$impactparameter <- gsub("^.*\\-- ", "", u) -->
+<!-- df_plot$Val[grep("Import", df_plot$impactparameter, ignore.case = T)] <- -df_plot$Val[grep("Import", df_plot$impactparameter, ignore.case = T)] -->
+<!-- these_colors <- c("green", "violet") -->
+<!-- colnames(df_plot)[ncol(df_plot)] <- "Share" -->
+<!-- gg <- ggplot(df_plot, aes(x = Year, y = Share, fill = impactparameter)) -->
+<!-- gg <- gg + geom_area(position = "stack", alpha = 0.4) -->
+<!-- gg <- gg + scale_fill_manual(values = these_colors) -->
+<!-- gg <- gg + facet_wrap(~ Country, ncol = 5) -->
+<!-- gg <- gg + theme(axis.title.x = element_blank(), -->
+<!--                  axis.text.x = element_text(angle = 60, hjust = 1), -->
+<!--                  legend.title = element_blank(), -->
+<!--                  legend.position = "bottom") -->
+<!-- gg -->
+
+<!-- ``` -->
+<!-- \pagebreak -->
 # Prices
 
-* Beef prices (not included in this graphic) are generally much higher than bean prices.
+IMPACT solves for the world prices of 58 agricultural commodities such that demand equals supply (in other words, such that world net trade is zero). Domestic consumer and producer prices are then derived from world prices based on each country's taxes, tariffs, producer and consumer support price policies, and transportation infrastructure. See the model documentation for details [@robinson2015international].
 
 * Poultry prices are competitive with bean prices, and increasingly so as time goes on.
 
 * The gap between bean producer and consumer price varies considerably across countries.
+
+* Beef prices (not included in this graphic) are generally much higher than bean prices.
 
 ```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
 beans_and_substitutes <- c("Beans", "Poultry")
@@ -351,7 +454,7 @@ colnames(df_price)[(ncol(df_price) - 1)] <- "2005 USD per metric ton"
 df_plot <- df_price
 gg <- ggplot(df_plot, aes(x = Year, y = `2005 USD per metric ton`, group = commod_price, color = commod_price))
 gg <- gg + geom_line(lwd = 1.4)
-gg <- gg + facet_wrap(~ Country, ncol = 5)
+gg <- gg + facet_wrap(~ Country, ncol = )
 gg <- gg + theme(axis.title.x = element_blank(),
                  axis.text.x = element_text(angle = 60, hjust = 1),
                  legend.title = element_blank(),
@@ -359,6 +462,78 @@ gg <- gg + theme(axis.title.x = element_blank(),
 gg <- gg + guides(color = guide_legend(nrow = 2))
 gg <- shift_legend2(gg)
 gg <- ggplotify::as.ggplot(gg)
+#gg
+
+```
+\pagebreak
+
+# Economic yield
+
+"Economic yield" means yield as a function of both biophysical and market variables (See Appendix for more details).
+
+* Bean yields projected to increase throughout Sub-Saharan Africa out to 2050, although Tanzania and Congo may see yields level off and then decline around 2040.
+
+```{r, fig.show='hold', fig.width=6, fig.height=5, fig.align='left', echo=FALSE}
+#unique(df$Commodity)
+df_plot <- subset(df, impactparameter == "YldXAgg -- Yield" &
+                    Commodity == "Beans" &
+                    System == "Rainfed")
+colnames(df_plot)[ncol(df_plot)] <- "Bean yield (metric tons / hectare)"
+n <- 2
+bag_of_colors <- randomcoloR::distinctColorPalette(k = 2 * n)
+these_colors <- sample(bag_of_colors, n)
+
+gg <- ggplot(df_plot, aes(x = Year, y = `Bean yield (metric tons / hectare)`))
+gg <- gg + geom_line(lwd = 1.3)
+gg <- gg + facet_wrap(~ Country, ncol = 4, scales = "free_y")
+gg <- gg + theme(axis.title.x = element_blank(),
+                 axis.text.x = element_text(angle = 60, hjust = 1))#,
+                 #legend.direction = "horizontal")
+# gg <- shift_legend2(gg)
+# gg <- ggplotify::as.ggplot(gg)
+gg
+
+```
+\pagebreak
+
+```{r, ft.align = "center", echo=FALSE}
+
+df_table <- df_plot
+df_table$System <- NULL
+df_table$impactparameter <- NULL
+df_table <- subset(df_table, Year %in% c(2020, 2050) &
+                     Commodity == "Beans")
+df_table$Commodity <- NULL
+df_table <- df_table %>% spread(Year, `Bean yield (metric tons / hectare)`)
+df_table$`Pct. Change` <- 100 * (df_table$`2050` - df_table$`2020`) / df_table$`2020`
+colnames(df_table)[2:3] <- c("2020 Bean yield (metric tons / hectare)", "2050 Bean yield (metric tons / hectare)")
+df_table[, 2:4] <- round(df_table[, 2:4], 1)
+#kable(df_table) %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+this_table <- regulartable(df_table, col_keys = colnames(df_table))
+this_table <- theme_vanilla(this_table)
+#this_table <- autofit(this_table)
+this_table <- width(this_table, width = 1.5)
+knitr::knit_print(this_table)
+
+```
+
+```{r, fig.show='hold', fig.width=6, fig.height=5, fig.align='left', echo=FALSE}
+
+colnames(df_plot)[ncol(df_plot)] <- "u"
+df_plot <- df_plot %>% group_by(Country) %>%
+  mutate(`Bean economic yield growth rate` = 1 + c(NA, diff(u) / u[-length(u)])) %>% as.data.frame()
+
+
+gg <- ggplot(df_plot, aes(x = Year, y = `Bean economic yield growth rate`))
+gg <- gg + geom_line(lwd = 1.3)
+gg <- gg + geom_hline(yintercept = 1, color = "red", linetype = "dashed", lwd = 1)
+gg <- gg + facet_wrap(~ Country, ncol = 4, scales = "free_y")
+gg <- gg + theme(axis.title.x = element_blank(),
+                 axis.text.x = element_text(angle = 60, hjust = 1))#,
+                 #legend.direction = "horizontal")
+# gg <- shift_legend2(gg)
+# gg <- ggplotify::as.ggplot(gg)
 gg
 
 ```
@@ -366,11 +541,15 @@ gg
 
 # Food security
 
-"The share at risk [of hunger] is the percentage of the total population that is at risk of suffering from undernourishment. This calculation is based on a strong empirical correlation between the share of undernourished within the total population and the relative availability of food and is adapted from the work done by Fischer et al. in the IIASA World Food System used by IIASA and FAO (Fischer et al. 2005)" [@robinson2015international].
+IMPACT models a country's share of population at risk of hunger "based on a strong empirical correlation between the share of undernourished within the total population and the relative availability of food and is adapted from the work done by Fischer et al. in the IIASA World Food System used by IIASA and FAO (Fischer et al. 2005)" [@robinson2015international]. See model documentation for more details.
 
 The cited reference is
 
 Fischer, G., M. Shah, F. N. Tubiello, and H. van Velhuizen. 2005. “Socio-economic and Climate Change Impacts on Agriculture: An Integrated Assessment.” Philosophical Transactions of the Royal Society B 360:2067–2083. http://rstb.royalsocietypublishing.org/content/360/1463/2067.full
+
+* The population at risk of hunger is projected to increase to alarming levels in Tanzania, Ethiopia, Uganda, and Kenya, while remaining relatively low for most other countries.
+
+* In the DRC, the population at risk of hunger is projected to decrease from its current alarming level towards a more manageable situation.
 
 ```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
 df_plot <- subset(df, impactparameter == "PopulationAtRiskXagg - Pop at Risk of Hunger")
@@ -380,7 +559,7 @@ colnames(df_plot)[ncol(df_plot)] <- "Percentage of population"
 
 gg <- ggplot(df_plot, aes(x = Year, y = `Percentage of population`, fill = impactparameter))
 gg <- gg + geom_area(position = "stack", alpha = 0.4, color = "violet")
-gg <- gg + facet_wrap(~Country, ncol = 5)
+gg <- gg + facet_wrap(~Country, ncol = 4)
 gg <- gg + theme(axis.title.x = element_blank(),
                  axis.text.x = element_text(angle = 60, hjust = 1),
                  legend.position = "none")
@@ -414,17 +593,21 @@ Citations of the 1995 document turn up on Google Scholar; but the document itsel
 
 ```{r, fig.show='hold', fig.width=6, fig.height=6, fig.align='left', echo=FALSE}
 
-  df_plot <- subset(df_IPR, Commodity == "Beans")
-  colnames(df_plot)[ncol(df_plot)] <- "Exogenous Bean Yield Growth Rate"
-  gg <- ggplot(df_plot, aes(x = Year, y = `Exogenous Bean Yield Growth Rate`,
-                            group = System, color = System))
+  #df_plot <- subset(df_IPR, Commodity == "Beans")
+not_beanGrowers <- c("Guinea", "Botswana", "Burkina Faso", "Central African Rep.", "Ghana", "Mali", "Senegal", "Sierra Leon")
+IPR_countries <- setdiff(all_PABRAcountries, not_beanGrowers)
+df_plot <- subset(df_IPR[, c("Country", "Year", "System", "Exogenous Bean Yield Growth Rate")], Country %in% IPR_countries &
+                    System == "Rainfed")
+  gg <- ggplot(df_plot, aes(x = Year, y = `Exogenous Bean Yield Growth Rate`))
+  gg <- gg + geom_hline(yintercept = 1, color = "red", linetype = "dashed", lwd = 1)
   gg <- gg + geom_line(lwd = 1.3)
-  gg <- gg + facet_wrap(~Country, ncol = 5)
+  gg <- gg + scale_color_manual(values = c("blue", "cyan"))
+  gg <- gg + facet_wrap(~Country, ncol = 4)
   gg <- gg + theme(axis.title.x = element_blank(),
-                   axis.text.x = element_text(angle = 60, hjust = 1),
-                   legend.direction = "horizontal")
-  gg <- shift_legend2(gg)
-  gg <- ggplotify::as.ggplot(gg)
+                   axis.text.x = element_text(angle = 60, hjust = 1))#,
+#                   legend.direction = "horizontal")
+#  gg <- shift_legend2(gg)
+#  gg <- ggplotify::as.ggplot(gg)
   gg
 
 ```
@@ -433,7 +616,17 @@ Citations of the 1995 document turn up on Google Scholar; but the document itsel
 
 ## Assumed climate change bean yield shock {-}
 
-Climate change (CC) bean rainfed yield shock according to five Global Circulation Models (GCMs): NORE, MIRO, IPSL, HGEM, GFDL. The demand, supply, price, and food security graphics in this report are based on the average across GCMs.
+Climate change (CC) shock to rainfed bean yield shock is modeld using four Global Circulation Models (GCMs)^[Also known as Earth System Models. See Robinson et al. [-@robinson2015international] for details.]:
+
+* GFDL-ESM2M: Designed and maintained by the National Oceanic and Atmospheric Administration’s Geophysical Fluid Dynamic Laboratory (www.gfdl.noaa.gov/earth-system-model)
+
+* HADGEM2-ES: The Hadley Centre’s Global Environment Model, version 2 (www.metoffice.gov.uk/research/modelling-systems/unified-model/climate-models/hadgem2)
+
+* IPSL-CM5A-LR: The Institut Pierre Simon Laplace’s ESM (http://icmc.ipsl.fr/index.php/icmc-models/icmc-ipsl-cm5)
+
+* MIROC-ESM: Model for Interdisciplinary Research on Climate, developed by the University of Tokyo, National Institute for Environmental Studies, and Japan Agency for Marin-Earth Science and Technology (www.geosci-model-dev-discuss.net/4/1063/2011/gmdd-4-1063-2011.pdf) 
+
+The demand, supply, price, yield, and food security graphics in this report are based on the average across these GCMs.
 
 ```{r, fig.show='hold', fig.width=6, fig.height=6, fig.align='left', echo=FALSE}
 
@@ -445,12 +638,12 @@ Climate change (CC) bean rainfed yield shock according to five Global Circulatio
   gg <- ggplot(df_plot, aes(x = Year, y = `CC Bean Yield Shock`,
                             group = Scenario, color = Scenario))
   gg <- gg + geom_line(lwd = 1.3)
-  gg <- gg + facet_wrap(~Country, ncol = 5)
+  gg <- gg + facet_wrap(~Country, ncol = 4)
   gg <- gg + theme(axis.title.x = element_blank(),
                    axis.text.x = element_text(angle = 60, hjust = 1),
-                   legend.direction = "horizontal")
-  gg <- shift_legend2(gg)
-  gg <- ggplotify::as.ggplot(gg)
+                   legend.position = "top")
+  # gg <- shift_legend2(gg)
+  # gg <- ggplotify::as.ggplot(gg)
   gg
 
 ```
@@ -470,7 +663,7 @@ colnames(df_GDP)[ncol(df_GDP)] <- "GDP / capita ('000 USD)"
 df_plot <- df_pop
 gg <- ggplot(df_plot, aes(x = Year, y = `Population (million)`))
 gg <- gg + geom_line(lwd = 1.3)
-gg <- gg + facet_wrap(~ Country, ncol = 5)
+gg <- gg + facet_wrap(~ Country, ncol = 4)
 gg <- gg + theme(axis.title.x = element_blank(),
                  axis.text.x = element_text(angle = 60, hjust = 1))
 gg
@@ -484,10 +677,93 @@ gg
 df_plot <- df_GDP
 gg <- ggplot(df_plot, aes(x = Year, y = `GDP / capita ('000 USD)`))
 gg <- gg + geom_line(lwd = 1.3)
-gg <- gg + facet_wrap(~ Country, ncol = 5)
+gg <- gg + facet_wrap(~ Country, ncol = 4)
 gg <- gg + theme(axis.title.x = element_blank(),
                  axis.text.x = element_text(angle = 60, hjust = 1))
 gg
 
 
+```
+
+## IMPACT demand categories {-}
+
+From the model documentation:
+
+* Household food demand, rural and urban: "[Household] demand is a function of the price of the commodity and the prices of other competing commodities, per capita income, and total population.... The IMPACT demand elasticities are originally based on United States Department of 
+Agriculture–estimated elasticities and adjusted to represent a synthesis of average, aggregate elasticities for each region, given the income level and distribution of urban and rural population (United States Department of Agriculture 1998). Over time the elasticities are adjusted to accommodate the gradual shift in demand from staples to high-value commodities like meat, especially in developing countries. This assumption is based on expected economic growth, increased urbanization, and continued commercialization of the agricultural sector. IMPACT is designed to simulate multiple types of households (that is, rural, urban, rich, poor, and so forth); however, currently, IMPACT treats household demand with one representative consumer per country" [@robinson2015international].
+
+* Export demand
+
+* Livestock feed demand: "Feed demand is a derived intermediate demand. It is determined by two components: (1) animal feed requirements determined by livestock production and livestock feed requirements and (2) price effects that take into account potential substitution possibilities among different feeds. The equation also incorporates a technology parameter that indicates improvements in feeding efficiencies over time" [@robinson2015international].
+  + "Intermediate demand is a derived demand that is based on the demand for final processed goods, such as food oils and sugar. The input-output matrix determines the proportions of inputs required for each producing activity" [@robinson2015international].
+
+* Other demand: "Other demand summarizes all other demands for agricultural products from sectors outside of the focus of IMPACT ( for example, seeds, industrial use)" [@robinson2015international].
+
+## IMPACT modeling of cropland use
+
+From the model documentation:
+
+"A new feature of IMPACT 3 is the implementation of a land market to manage competing demands for agricultural land from different crops, as well as providing new linkage points to land-use models that work with broader land-use changes, such as conversion of forest to grasslands and agricultural land. It also allows us to separate total area supply (irrigated and rainfed) from individual crop area demands and allows equilibrium conditions to determine the best economic use of the available land. The total supply of land is assumed to be a function of the scarcity value or shadow price index of land, which can also be considered a summary of changes in crop prices. The shadow price (WF) is indexed to 1 in the first year and changes based on changing demands from all crops for land area.... The supply of land is considered exogenous within each year, meaning that farmers are not allowed to adjust the total crop area in the middle of the year. The total land supply over time is driven by exogenous trends on the availability of area for agriculture as well as endogenous responses to changes in area demand, which is handled in between years....
+
+"Crop area is specified as an area demand function with respect to changes in the marginal revenue product, changes in land cost, and exogenous nonprice trends in harvested area. Crop area elasticities simulate the supply response to changes in the marginal revenue of land represented by [a function of] the interaction of the net price of an activity and the productivity of the activity in using an additional hectare of land.
+
+"[The function includes an] exogenous trend...[that] captures changes in area resulting from factors other than direct market effects, such as government programs encouraging cropping expansion, contraction due to soil degradation, or conversion of land from agriculture to nonagricultural uses. Assumptions for exogenous trends are determined by a combination of historical changes in land use and expert judgment on potential future regional dynamics. They are represented as compound growth from the base and are applied between years. Competing demands from different crops are handled through an equilibrium equation that determines the land allocation and ensures that all crop area demand sums up to the total land supply for each [geographical unit]" [@robinson2015international].
+
+
+## How IMPACT models economic yields {-}
+
+IMPACT models economic yield $y$ for a given crop in any given year as follows [@robinson2015international]:
+
+$$
+y = k \: s \: p^{\eta_p} \: w^{\eta_w}
+$$
+Where $k$ is the exogenous yield growth rate, $s$ is the climate shock, $p$ is the output price, $w$ is an input price index, and $\eta_p$, $\eta_w$ are the yield elasticities with respect to output and input price, respectively.
+
+The prices $p$ and $w$ are endogenous to the model. The climate change shock $s$ is determined based on global circulation models (GCMs) coupled with crop models. The GCMs are calibrated according to a user selected Representative Concentration Pathway (RCP), which reflects the modeler's assumptions regarding future climate change mitigation, or lack thereof. The RCP selected in this analysis is RCP 6.0, widely regarded as a "business as usual" scenario.
+
+The elasticities $\eta_p$, $\eta_w$ and yield growth rate ($k$) are exogenous inputs to the model, based on expert opinion. See the Appendix section above for more details on how the exogenous yield growth rate is estimated.
+
+## Maps of baseline bean yield and harvested area {-}
+
+In IMPACT, geographically explicit baseline yields and harvested area are based on the Spatial Production Allocation Model (https://www.mapspam.info/). These maps thus form a critical part of the assumptions fed into IMPACT. They are included below for transparency.
+
+Results for irrigated bean were excluded from the analysis above because the maps below indicate that irrigated bean cultivation in Africa is negligible.
+
+```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
+
+# setwd('D:/CGIAR/Climate Resilience and Data Science! - [project] PABRA and Bean Foresight/Materials and Methods/Camila')
+this_folder <- "E:/BSCHIEK/PABRA Bean Corridor IMPACT Analysis"
+afr <- shapefile(paste0(this_folder, "/africa.shp"))
+ssa <- shapefile(paste0(this_folder, "/SSA.shp"))
+
+# Irrigated bean-Harvested area
+bean_harv_I <- crop(mask(raster(paste0(this_folder, "/spam2010v1r1_global_harv_area.geotiff/spam2010V1r1_global_H_BEAN_I.tif")), ssa), ssa)
+# bean_harv_I[bean_harv_I$spam2010V1r1_global_H_BEAN_I==0] <- NA
+bean_harv_I[bean_harv_I$spam2010V1r1_global_H_BEAN_I>40] <- 50
+
+plot(bean_harv_I,main='Harvested area-Irrigated bean (ha)')
+lines(ssa)
+
+# Rainfed bean-Harvested area
+bean_harv_R <- crop(mask(raster(paste0(this_folder, "/spam2010v1r1_global_harv_area.geotiff/spam2010V1r1_global_H_BEAN_R.tif")), ssa), ssa)
+# bean_harv_R[bean_harv_R$spam2010V1r1_global_H_BEAN_R==0] <- NA
+bean_harv_R[bean_harv_R$spam2010V1r1_global_H_BEAN_R > 6000] <- 6500
+plot(bean_harv_R, main = "Harvested area-Rainfed bean (ha)")
+lines(ssa)
+
+# Irrigated bean-Yield 
+bean_yld_I <- crop(mask(raster(paste0(this_folder, "/spam2010v1r1_global_yield.geotiff/spam2010V1r1_global_Y_BEAN_I.tif")), ssa), ssa)
+# bean_yld_I[bean_yld_I$spam2010V1r1_global_Y_BEAN_I==0] <- NA
+bean_yld_I[bean_yld_I$spam2010V1r1_global_Y_BEAN_I>6000] <- 6500
+
+plot(bean_yld_I,main='Yield-Irrigated bean (kg/ha)')
+lines(ssa)
+
+# Rainfed bean-Yield 
+bean_yld_R <- crop(mask(raster(paste0(this_folder, "/spam2010v1r1_global_yield.geotiff/spam2010V1r1_global_Y_BEAN_R.tif")), ssa), ssa)
+# bean_yld_R[bean_yld_R$spam2010V1r1_global_Y_BEAN_R==0] <- NA
+bean_yld_R[bean_yld_R$spam2010V1r1_global_Y_BEAN_R>4500] <- 5000
+
+plot(bean_yld_R,main='Yield-Rainfed bean (kg/ha)')
+lines(ssa)
 ```
