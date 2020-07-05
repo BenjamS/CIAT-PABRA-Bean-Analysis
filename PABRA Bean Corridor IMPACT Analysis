@@ -23,6 +23,7 @@ library(raster)
 library(rgdal)
 library(flextable)
 library(officer)
+library(ggrepel)
 #===========================================================================
 shift_legend2 <- function(p) {
   # ...
@@ -52,7 +53,6 @@ rawData_filepath <- paste0(rawData_folder, rawData_filename)
 ```
 
 ```{r, echo=FALSE}
-
 demandVar_vec <- c("QDXAgg -- Total Demand",
                    "QHDXAgg -- Household Demand",
                    "QFXAgg -- Household Demand",
@@ -108,7 +108,7 @@ these_countries <- c(ECABREN_vec, SABRN_vec, WECABREN_vec)
 # 
 # df <- subset(df_raw, region %in% these_countries &
 #                scenario != "NoCC" &
-#                year >= 2020)
+#                year >= 2005)
 # 
 # df$region <- gsub("SSA-", "", df$region)
 # u <- df$productiontype
@@ -125,16 +125,60 @@ these_countries <- c(ECABREN_vec, SABRN_vec, WECABREN_vec)
 #=============================================================================
 #=============================================================================
 #=============================================================================
-#=============================================================================
 ECABREN_vec <- gsub("SSA-", "", ECABREN_vec)
 SABRN_vec <- gsub("SSA-", "", SABRN_vec)
 WECABREN_vec <- gsub("SSA-", "", WECABREN_vec)
 all_PABRAcountries <- unique(c(ECABREN_vec, SABRN_vec, WECABREN_vec))
+AVISA_vec <- c("Mali", "Kenya", "Tanzania", "Burkina Faso",
+               "Nigeria", "Ghana", "Ethiopia", "Ghana")
 list_country_vec <- list(ECABREN_vec, SABRN_vec, WECABREN_vec)
 country_group_names <- c("ECABREN", "SABRN", "WECABREN")
 sys_vec <- c("Irrigated", "Rainfed")
 n_countryLists <- length(list_country_vec)
 n_sys <- length(sys_vec)
+#=============================================================================
+# Get FAO FBS data
+df_raw_1 <- read.csv("FoodBalanceSheetsHistoric_E_All_Data.csv", stringsAsFactors = F)
+df_raw_1 <- subset(df_raw_1, Item.Code != 2928)
+df_raw_2 <- read.csv("FoodBalanceSheets_E_All_Data.csv", stringsAsFactors = F)
+df_raw_2 <- subset(df_raw_2, Item.Code != 2928)
+rm_cols <- c("Area.Code", "Item.Code", "Element.Code")
+rm_cols <- which(colnames(df_raw_1) %in% rm_cols)
+df_raw_1 <- df_raw_1[, -rm_cols]
+df_raw_2 <- df_raw_2[, -rm_cols]
+df_raw <- merge(df_raw_1, df_raw_2, by = c("Area", "Item", "Element", "Unit"))
+df_raw$Item <- as.character(df_raw$Item)
+df_raw$Element <- as.character(df_raw$Element)
+df_raw$Area <- as.character(df_raw$Area)
+u <- colnames(df_raw)
+df_raw <- df_raw[, -grep("F", u)]
+v <- colnames(df_raw)[5:ncol(df_raw)]
+colnames(df_raw)[5:ncol(df_raw)] <- gsub("Y", "", v)
+df_raw <- gather(df_raw,Year,Value,`1961`:`2017`)
+df_FAOfbal <- df_raw
+rm(df_raw)
+#unique(df_FAOfbal$Area)
+#unique(df_raw_2$Area[grep("Kenya", df_raw_2$Area)])
+df_FAOfbal$Area[grep("Tanzania", df_FAOfbal$Area)] <- "Tanzania"
+df_FAOfbal$Area[grep("Central African Republic", df_FAOfbal$Area)] <- "Central African Rep."
+df_FAOfbal$Area[grep("Sierra Leone", df_FAOfbal$Area)] <- "Sierra Leon"
+#unique(df_FAOfbal$Element)
+# "Domestic supply quantity"
+element_vec <- c("Food supply (kcal/capita/day)", "Export Quantity",
+                 "Losses", "Feed", "Seed", "Processing", "Food")
+df_FAOfbal <- subset(df_FAOfbal, Area %in% all_PABRAcountries &
+                       Year >= 2005 &
+                       Item == "Beans" &
+                       Element %in% element_vec)
+colnames(df_FAOfbal)[1] <- "Country"
+#setdiff(all_PABRAcountries, unique(df_FAOfbal$Country))
+df_FAOfbal$Item <- NULL
+#df_FAOfbal$Unit <- NULL
+#df_FAOfbal <- df_FAOfbal %>% spread(Element, Value)
+#colnames(df_FAOfbal)[3:4] <- c("Domestic supply quantity (FAO)", "kcal/capita/day (FAO)")
+rm(df_raw_1, df_raw_2)
+#=============================================================================
+#=============================================================================
 #-----------------------------------------------------------------------------
 df_raw <- read.csv(paste0(rawData_folder, "AVISA_0_sub_sub.csv"), stringsAsFactors = F)
 #colnames(df_raw)
@@ -190,6 +234,40 @@ df <- df %>% group_by(Year, System, Country, Commodity, impactparameter) %>%
   summarise(Val = mean(Val, na.rm = T))
 # unique(df$Country)
 # unique(df$Commodity)
+test_these <- c("PerCapKCalCXAgg -- PcKcal by Commodity",
+                "QFXAgg -- Household Demand",
+                "QEXAgg -- Export",
+                "QLXAgg -- Livestock Feed Demand",
+                "QINTXAgg -- Intermediate Demand",
+                "QOTHRXAgg -- Other Demand")
+df_test <- subset(df, impactparameter %in% test_these &
+                    Commodity == "Beans" &
+                    Year %in% c(2005:2017))
+df_test$impactparameter <- gsub("^.*\\-- ", "", df_test$impactparameter)
+df_test$impactparameter <- paste(df_test$impactparameter, "(IMPACT)")
+df_test$System <- NULL
+df_test_kcalPerCap <- subset(df_test, impactparameter == "PcKcal by Commodity (IMPACT)")
+#colnames(df_test_kcalPerCap)
+df_test_kcalPerCap$impactparameter <- NULL
+colnames(df_test_kcalPerCap)[4] <- "PcKcal by Commodity (IMPACT)"
+df_FAOfbal_kcalPerCap <- subset(df_FAOfbal, Element == "Food supply (kcal/capita/day)")
+df_FAOfbal_kcalPerCap$Element <- NULL
+df_FAOfbal_kcalPerCap$Unit <- NULL
+colnames(df_FAOfbal_kcalPerCap)[3] <- "kcal/capita/day (FAO)"
+df_test_kcalPerCap <- merge(df_test_kcalPerCap, df_FAOfbal_kcalPerCap, by = c("Country", "Year"))
+df_test_kcalPerCap <- subset(df_test_kcalPerCap, Year %in% c(2010, 2015))
+#----------------------------------------------------------------------------
+#colnames(df_test)
+df_plot <- df_test_kcalPerCap
+gg <- ggplot(df_plot, aes(x = `kcal/capita/day (FAO)`, y = `PcKcal by Commodity (IMPACT)`))
+gg <- gg + geom_point()
+gg <- gg + geom_abline(slope = 1, intercept = 0, linetype = "dashed")
+gg <- gg + geom_text_repel(aes(label = Country))
+gg <- gg + facet_wrap(~Year)
+#gg
+gg_testKcal <- gg
+#============================================================================
+df <- subset(df, Year >= 2017)
 ```
 # Summary and purpose
 
@@ -252,19 +330,40 @@ gg
 df_table <- df_plot %>% group_by(Country, Year) %>%
   summarise(`'000 metric tons` = sum(`'000 metric tons`)) %>%
   as.data.frame()
-df_table <- subset(df_table, Year %in% c(2020, 2050))
+df_table <- subset(df_table, Year %in% c(2017, 2050))
 df_table <- df_table %>% spread(Year, `'000 metric tons`)
-df_table$`Pct. Change` <- 100 * (df_table$`2050` - df_table$`2020`) / df_table$`2020`
-colnames(df_table)[2:3] <- c("2020 Bean demand ('000 MT)", "2050 Bean demand ('000 MT)")
-df_table[, 2:4] <- round(df_table[, 2:4], 1)
+df_table$`Pct. Change` <- 100 * (df_table$`2050` - df_table$`2017`) / df_table$`2017`
+
+FAOdemandCats <- c("Export Quantity", "Food", "Losses", "Seed", "Feed")
+df_FAOfbal_demand <- subset(df_FAOfbal, Element %in% FAOdemandCats &
+                  Year %in% c(2005:2017))
+df_FAO <- subset(df_FAOfbal_demand, Year == 2017)
+df_FAO <- df_FAO %>% group_by(Country) %>%
+  summarise(`2017 Bean demand ('000 metric tons, FAO)` = sum(Value, na.rm = T)) %>% as.data.frame()
+#setdiff(df_table$Country, df_FAO$Country)
+
+df_add <- subset(df_table[, c("Country", "2017", "Pct. Change")], Country %in% c("Burundi", "DRC"))
+
+df_table <- df_table[, c("Country", "Pct. Change")]
+
+df_table <- merge(df_FAO, df_table, by = "Country")
+colnames(df_add)[2] <- "2017 Bean demand ('000 metric tons, FAO)"
+df_table <- rbind(df_table, df_add)
+df_table$`2050 Bean demand ('000 metric tons, IMPACT)` <- (1 + 10^-2 * df_table$`Pct. Change`) * df_table$`2017 Bean demand ('000 metric tons, FAO)`
+df_table <- df_table[, c("Country",
+                         "2017 Bean demand ('000 metric tons, FAO)",
+                         "2050 Bean demand ('000 metric tons, IMPACT)",
+                         "Pct. Change")]
+df_table[, 2:4] <- round(df_table[, 2:4], 2)
 #kable(df_table) %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
 
 this_table <- regulartable(df_table, col_keys = colnames(df_table))
 this_table <- theme_vanilla(this_table)
 #this_table <- autofit(this_table)
 this_table <- width(this_table, width = 1.5)
+this_table <- bg(this_table, i = which(df_table$Country %in% AVISA_vec),
+                 bg = "orange")
 knitr::knit_print(this_table)
-
 
 ```
 
@@ -310,19 +409,28 @@ gg <- ggplotify::as.ggplot(gg)
 df_table <- df_plot
 df_table$System <- NULL
 df_table$impactparameter <- NULL
+df_table <- df_table %>% group_by(Country, Year) %>%
+  mutate(totProt = sum(`kcal/capita/day`)) %>%
+  as.data.frame()
+df_table$`Share of kcal/capita/day` <- df_table$`kcal/capita/day` / df_table$totProt
 df_table <- subset(df_table, Year %in% c(2020, 2050) &
                      Commodity == "Beans")
 df_table$Commodity <- NULL
-df_table <- df_table %>% spread(Year, `kcal/capita/day`)
+df_table$totProt <- NULL
+df_table$`kcal/capita/day` <- NULL
+df_table <- df_table %>% spread(Year, `Share of kcal/capita/day`)
+
 df_table$`Pct. Change` <- 100 * (df_table$`2050` - df_table$`2020`) / df_table$`2020`
-colnames(df_table)[2:3] <- c("2020 Bean kcal/capita/day", "2050 Bean kcal/capita/day")
-df_table[, 2:4] <- round(df_table[, 2:4], 1)
+colnames(df_table)[2:3] <- c("2020 Bean share of protein kcal/capita/day", "2050 Bean share of protein kcal/capita/day")
+df_table[, 2:4] <- round(df_table[, 2:4], 2)
 #kable(df_table) %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
 
 this_table <- regulartable(df_table, col_keys = colnames(df_table))
 this_table <- theme_vanilla(this_table)
 #this_table <- autofit(this_table)
 this_table <- width(this_table, width = 1.5)
+this_table <- bg(this_table, i = which(df_table$Country %in% AVISA_vec),
+                 bg = "orange")
 knitr::knit_print(this_table)
 
 
@@ -390,45 +498,19 @@ df_table$Commodity <- NULL
 df_table <- df_table %>% spread(Year, `'000 hectares`)
 df_table$`Pct. Change` <- 100 * (df_table$`2050` - df_table$`2020`) / df_table$`2020`
 colnames(df_table)[2:3] <- c("2020 Bean '000 hectares", "2050 Bean '000 hectares")
-df_table[, 2:4] <- round(df_table[, 2:4], 1)
+df_table[, 2:4] <- round(df_table[, 2:4], 2)
 #kable(df_table) %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
 
 this_table <- regulartable(df_table, col_keys = colnames(df_table))
 this_table <- theme_vanilla(this_table)
 #this_table <- autofit(this_table)
 this_table <- width(this_table, width = 1.5)
+this_table <- bg(this_table, i = which(df_table$Country %in% AVISA_vec),
+                 bg = "orange")
 knitr::knit_print(this_table)
 
 
 ```
-<!-- ## Trade as share of demand and production -->
-
-<!-- Negative values indicate import dependence to meet domestic bean demand. Positive values indicate bean exports as a share of production. -->
-
-<!-- #```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE} -->
-
-<!-- #unique(df$impactparameter) -->
-<!-- these_vars <- c("QESHXAgg -- Export Share of Production", -->
-<!--                 "QMSHXAgg -- Import Share of Demand") -->
-<!-- df_plot <- subset(df, impactparameter %in% these_vars & -->
-<!--                     Commodity == "Beans") -->
-<!-- u <- df_plot$impactparameter -->
-<!-- df_plot$impactparameter <- gsub("^.*\\-- ", "", u) -->
-<!-- df_plot$Val[grep("Import", df_plot$impactparameter, ignore.case = T)] <- -df_plot$Val[grep("Import", df_plot$impactparameter, ignore.case = T)] -->
-<!-- these_colors <- c("green", "violet") -->
-<!-- colnames(df_plot)[ncol(df_plot)] <- "Share" -->
-<!-- gg <- ggplot(df_plot, aes(x = Year, y = Share, fill = impactparameter)) -->
-<!-- gg <- gg + geom_area(position = "stack", alpha = 0.4) -->
-<!-- gg <- gg + scale_fill_manual(values = these_colors) -->
-<!-- gg <- gg + facet_wrap(~ Country, ncol = 5) -->
-<!-- gg <- gg + theme(axis.title.x = element_blank(), -->
-<!--                  axis.text.x = element_text(angle = 60, hjust = 1), -->
-<!--                  legend.title = element_blank(), -->
-<!--                  legend.position = "bottom") -->
-<!-- gg -->
-
-<!-- ``` -->
-<!-- \pagebreak -->
 # Prices
 
 IMPACT solves for the world prices of 58 agricultural commodities such that demand equals supply (in other words, such that world net trade is zero). Domestic consumer and producer prices are then derived from world prices based on each country's taxes, tariffs, producer and consumer support price policies, and transportation infrastructure. See the model documentation for details [@robinson2015international].
@@ -507,13 +589,15 @@ df_table$Commodity <- NULL
 df_table <- df_table %>% spread(Year, `Bean yield (metric tons / hectare)`)
 df_table$`Pct. Change` <- 100 * (df_table$`2050` - df_table$`2020`) / df_table$`2020`
 colnames(df_table)[2:3] <- c("2020 Bean yield (metric tons / hectare)", "2050 Bean yield (metric tons / hectare)")
-df_table[, 2:4] <- round(df_table[, 2:4], 1)
+df_table[, 2:4] <- round(df_table[, 2:4], 2)
 #kable(df_table) %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
 
 this_table <- regulartable(df_table, col_keys = colnames(df_table))
 this_table <- theme_vanilla(this_table)
 #this_table <- autofit(this_table)
 this_table <- width(this_table, width = 1.5)
+this_table <- bg(this_table, i = which(df_table$Country %in% AVISA_vec),
+                 bg = "orange")
 knitr::knit_print(this_table)
 
 ```
@@ -547,9 +631,9 @@ The cited reference is
 
 Fischer, G., M. Shah, F. N. Tubiello, and H. van Velhuizen. 2005. “Socio-economic and Climate Change Impacts on Agriculture: An Integrated Assessment.” Philosophical Transactions of the Royal Society B 360:2067–2083. http://rstb.royalsocietypublishing.org/content/360/1463/2067.full
 
-* The population at risk of hunger is projected to increase to alarming levels in Tanzania, Ethiopia, Uganda, and Kenya, while remaining relatively low for most other countries.
+* The population at risk of hunger is projected to increase to high levels in Tanzania, Ethiopia, Uganda, and Kenya, while remaining relatively low for most other countries.
 
-* In the DRC, the population at risk of hunger is projected to decrease from its current alarming level towards a more manageable situation.
+* In the DRC, the population at risk of hunger is projected to decrease from its current high level towards a more manageable situation.
 
 ```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
 df_plot <- subset(df, impactparameter == "PopulationAtRiskXagg - Pop at Risk of Hunger")
@@ -766,4 +850,83 @@ bean_yld_R[bean_yld_R$spam2010V1r1_global_Y_BEAN_R>4500] <- 5000
 
 plot(bean_yld_R,main='Yield-Rainfed bean (kg/ha)')
 lines(ssa)
+```
+
+## Trade as share of demand and production {-}
+
+In the graphic below, negative values indicate import dependence to meet domestic bean demand. Positive values indicate bean exports as a share of production.
+
+According to FAO, bean exports in Sub-Saharan Africa have increased by about 500% over the past ten years. However, exports still account for a small amount (less than 10%) of total bean demand in the region. IMPACT does not register trade flows at this level of granularity, as is evident in this graphic.
+
+```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
+
+#unique(df$impactparameter)
+these_vars <- c("QESHXAgg -- Export Share of Production",
+                "QMSHXAgg -- Import Share of Demand")
+df_plot <- subset(df, impactparameter %in% these_vars &
+                    Commodity == "Beans")
+u <- df_plot$impactparameter
+df_plot$impactparameter <- gsub("^.*\\-- ", "", u)
+df_plot$Val[grep("Import", df_plot$impactparameter, ignore.case = T)] <- -df_plot$Val[grep("Import", df_plot$impactparameter, ignore.case = T)]
+these_colors <- c("green", "violet")
+colnames(df_plot)[ncol(df_plot)] <- "Share"
+gg <- ggplot(df_plot, aes(x = Year, y = Share, fill = impactparameter))
+gg <- gg + geom_area(position = "stack", alpha = 0.4)
+gg <- gg + scale_fill_manual(values = these_colors)
+gg <- gg + facet_wrap(~ Country, ncol = 5)
+gg <- gg + theme(axis.title.x = element_blank(),
+                 axis.text.x = element_text(angle = 60, hjust = 1),
+                 legend.title = element_blank(),
+                 legend.position = "bottom")
+gg
+
+```
+\pagebreak
+
+## Reality check: IMPACT compared to FAO data for 2005-2017
+
+The baseline year in IMPACT is 2005. This makes it possible to compare part of the IMPACT output to FAO data, and thus identify areas where IMPACT performs well and areas where IMPACT may be inaccurate.
+
+Below, IMPACT bean kcal/capita/day is compared against FAO reported kcal/capita/day for the years 2010 and 2015 (IMPACT calculates this variable at five year intervals). IMPACT bean demand is then compared against FAO bean demand for the years 2005-2017.
+
+```{r, fig.show='hold', fig.width=8, fig.height=4, fig.align='left', echo=FALSE}
+
+print(gg_testKcal)
+
+```
+
+```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', echo=FALSE}
+
+df_FAOfbal_demand <- df_FAOfbal_demand %>% group_by(Country, Year) %>%
+  summarise(`Demand\n'000 metric tons (FAO)` = sum(Value, na.rm = T)) %>%
+  as.data.frame()
+
+IMPACTdemandCats <- c("Household Demand (IMPACT)", 
+                      "Other Demand (IMPACT)",
+                      "Export (IMPACT)",
+                      "Livestock Feed Demand (IMPACT)")
+df_test_demand <- subset(df_test, impactparameter %in% IMPACTdemandCats &
+                           Year %in% c(2005:2017))
+
+df_test_demand <- df_test_demand %>% group_by(Country, Year) %>%
+  summarise(`Demand\n'000 metric tons (IMPACT)` = sum(Val, na.rm = T)) %>%
+  as.data.frame()
+
+df_plot <- merge(df_test_demand, df_FAOfbal_demand, by = c("Country", "Year"))
+
+df_plot <- df_plot %>% gather(Variable, Value, `Demand\n'000 metric tons (IMPACT)`:`Demand\n'000 metric tons (FAO)`)
+
+yr_1 <- min(unique(df_plot$Year))
+yr_n <- max(unique(df_plot$Year))
+gg <- ggplot(df_plot, aes(x = Year, y = Value, group = Variable, color = Variable))
+gg <- gg + geom_line(lwd = 1)
+gg <- gg + scale_x_continuous(breaks = seq(yr_1, yr_n, 3))
+gg <- gg + facet_wrap(~Country, ncol = 4, scales = "free_y")
+gg <- gg + theme(legend.title = element_blank(),
+                 axis.title = element_blank())
+gg <- gg + guides(color = guide_legend(nrow = 2))
+gg <- shift_legend2(gg)
+gg <- ggplotify::as.ggplot(gg)
+
+
 ```
