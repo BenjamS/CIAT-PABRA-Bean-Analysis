@@ -1,0 +1,414 @@
+---
+title: "Bean price and production volatility in East Africa"
+author: "Ben Schiek"
+date: July 21, 2020
+output:
+  word_document:
+    fig_caption: true
+---
+
+# Bean production volatility
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      message = FALSE,
+                      warning = FALSE)
+#library(plyr)
+library(tidyverse)
+library(patchwork)
+library(flextable)
+#library(officer)
+#library(ggrepel)
+#library(kableExtra)
+#https://ageconsearch.umn.edu/record/287593
+# Special thanks to Linda Eells and Frances Homans at the University of Minnesota for helping me track down this time series.
+#===========================================================================
+shift_legend2 <- function(p) {
+  # ...
+  # to grob
+  gp <- ggplotGrob(p)
+  facet.panels <- grep("^panel", gp[["layout"]][["name"]])
+  empty.facet.panels <- sapply(facet.panels, function(i) "zeroGrob" %in% class(gp[["grobs"]][[i]]))
+  empty.facet.panels <- facet.panels[empty.facet.panels]
+  
+  # establish name of empty panels
+  empty.facet.panels <- gp[["layout"]][empty.facet.panels, ]
+  names <- empty.facet.panels$name
+  # example of names:
+  #[1] "panel-3-2" "panel-3-3"
+  
+  # now we just need a simple call to reposition the legend
+  #lemon::reposition_legend(p, 'center', panel=names)
+  p_out <- lemon::reposition_legend(p, 'center', panel=names)
+  #class(lemon::reposition_legend(p, 'center', panel=names))
+  return(p_out)
+}
+
+```
+
+### Bean production per capita with 3 year moving average overlaid
+
+```{r, fig.show = "hold", fig.width = 7, fig.height=4, fig.align="center", fig.cap="\\label{fig:prodPcap}Bean production per capita with 3 year moving average.", echo = FALSE}
+
+area_vec <- c("Tanzania", "Uganda", "Ethiopia", "Kenya", "Rwanda")
+year_vec <- c(1993:2018)
+item_vec <- "Beans, dry"
+#============================================================================
+setwd("C:/Users/bensc/OneDrive/Documents/")
+df_raw <- read.csv("FAO Data/Production_Crops_E_All_Data.csv", stringsAsFactors = F)
+df_raw <- subset(df_raw, Item.Code != 2928)
+df_raw$Area.Code <- NULL
+df_raw$Item.Code <- NULL
+df_raw$Element.Code <-NULL
+#df_raw$Unit <- NULL
+u <- colnames(df_raw)
+df_raw <- df_raw[, -grep("F", u)]
+u <- colnames(df_raw)
+df_raw <- df_raw[, -grep("N", u)]
+last_yr <- (1961 + ncol(df_raw) - 5)
+colnames(df_raw)[5:ncol(df_raw)] <- as.character(c(1961:last_yr))
+gathercols <- colnames(df_raw)[5:ncol(df_raw)]
+df_raw <- gather_(df_raw, "Year", "Value", gathercols)
+#------------------------------
+#unique(df_raw$Item)[grep("beans", unique(df_raw$Item), ignore.case = T)]
+df_raw$Area[grep("Tanzania", df_raw$Area)] <- "Tanzania"
+df_prod <- subset(df_raw, Item %in% item_vec &
+                    Area %in% area_vec &
+                    Element == "Production" &
+                    Year %in% year_vec)
+df_prod$Element <- NULL
+colnames(df_prod)[ncol(df_prod)] <- "Production"
+colnames(df_prod)[1] <- "Country"
+df_prod$Year <- as.integer(df_prod$Year)
+#------------------------------
+df_yield <- subset(df_raw, Item %in% item_vec &
+                    Area %in% area_vec &
+                    Element == "Yield" &
+                    Year %in% year_vec)
+df_yield$Element <- NULL
+df_yield$Value <- df_yield$Value / 10000
+colnames(df_yield)[ncol(df_yield)] <- "Yield (metric tons / ha.)"
+colnames(df_yield)[1] <- "Country"
+df_yield$Year <- as.integer(df_yield$Year)
+# #---------------------------------------------------------------------------
+# df_prod <- df_prod %>% group_by(Country) %>%
+#   mutate(`Detrended bean production` = `Bean production` - TTR::EMA(`Bean production`, 3)) %>%
+#   as.data.frame()
+# #---------------------------------------------------------------------------
+# df_plot <- df_prod
+# gg <- ggplot(df_plot, aes(x = Year, y = `Detrended bean production`,
+#                           group = Country, color = Country))
+# gg <- gg + geom_line(lwd = 1)
+# #gg <- gg + facet_wrap(~Area, scales = "free_y")
+# gg <- gg + theme(axis.title.x = element_blank())
+# gg
+# 
+# df_prod <- df_prod %>% group_by(Country) %>%
+#   mutate(`Stand. dev.` = sd(`Detrended bean production`, na.rm = T)) %>%
+#   as.data.frame()
+# #---------------------------------------------------------------------------
+# df_dt_sd <- subset(df_prod, Year == 2018)
+#---------------------------------------------------------------------------
+df_raw <- read.csv("FAO Data/FAO_pop_all.csv", stringsAsFactors = F)
+#colnames(df_raw)
+df_raw <- df_raw[, c("Area", "Year", "Element", "Unit", "Value")]
+#unique(df_raw$Element)
+df_raw$Area[grep("Tanzania", df_raw$Area)] <- "Tanzania"
+df_pop <- subset(df_raw, Element == "Total Population - Both sexes" &
+                   Area %in% area_vec &
+                   Year %in% year_vec)
+colnames(df_pop)[1] <- "Country"
+colnames(df_pop)[ncol(df_pop)] <- "Population"
+df_pop$Population <- df_pop$Population * 1000
+df_pop <- df_pop[, c("Country", "Year", "Population")]
+df_prodPcap <- merge(df_prod, df_pop, by = c("Country", "Year"))
+df_prodPcap$`Production / capita (metric tons)` <- df_prodPcap$`Production` / df_prodPcap$Population
+df_prodPcap <- df_prodPcap %>% group_by(Country) %>%
+  mutate(`Production / capita moving average` = TTR::SMA(`Production / capita (metric tons)`, 3)) %>%
+  as.data.frame()
+#-----------------------------------------------------------------------------
+df_plot <- df_prodPcap
+df_plot <- df_plot %>% gather(Type, Value, `Production / capita (metric tons)`:`Production / capita moving average`)
+gg <- ggplot(df_plot, aes(x = Year, y = Value,
+                              group = Type, color = Type))
+gg <- gg + geom_line(lwd = 1)
+gg <- gg + facet_wrap(~Country, scales = "free_y")
+gg <- gg + scale_x_continuous(breaks = seq(1994, 2018, 6))
+gg <- gg + theme(legend.position = "top",
+                 legend.title = element_blank(),
+                 legend.spacing.x = unit(0.5, 'cm'),
+                 axis.title = element_blank())
+gg
+
+```
+
+### Bean production per capita detrended (production/capita minus 3 year moving average)
+
+```{r, fig.show = "hold", fig.width = 7, fig.height=4, fig.align="center", fig.cap="\\label{fig:prodPcapDetrend}Per capita bean production, detrended.", echo = FALSE}
+
+df_prodPcap$`Production / capita detrended` <- df_prodPcap$`Production / capita (metric tons)` - df_prodPcap$`Production / capita moving average`
+
+df_plot <- df_prodPcap
+gg <- ggplot(df_plot, aes(x = Year, y = `Production / capita detrended`))
+gg <- gg + geom_hline(yintercept = 0, color = "coral")
+gg <- gg + geom_line(lwd = 1)
+gg <- gg + scale_x_continuous(breaks = seq(1994, 2018, 6))
+gg <- gg + facet_wrap(~Country, scales = "free_y")
+gg <- gg + theme(axis.title.x = element_blank())
+gg
+
+```
+
+### Yearly pct. change in per capita bean production (1997-2018).
+
+Maybe this is a better way to look at it...
+
+* Kenya, Rwanda, Tanzania, and Ethiopia exhibit a tumultuous per capita bean production trajectory, with swings of 25%-50% or more in many years. However, since about 2012 these violent swings show signs of tapering off.
+
+* Uganda stands in sharp contrast to its neighbors, exhibiting very steady per capita bean production, with little change from year to year apart from the 2008 crisis (which, somewhat oddly, gave a boost to bean production).
+
+
+```{r, fig.show = "hold", fig.width = 7, fig.height=4, fig.align="center", fig.cap="\\label{fig:prodPcapYrlyPctChng}Per capita bean production, yearly percent change.", echo = FALSE}
+
+df_prodPcap <- df_prodPcap %>% group_by(Country) %>%
+  mutate(`Yearly Pct. Change` = c(NA, 100 * diff(`Production / capita (metric tons)`) / `Production / capita (metric tons)`[-length(`Production / capita (metric tons)`)])) %>% as.data.frame()
+
+df_plot <- subset(df_prodPcap, Year >= 1997)
+gg <- ggplot(df_plot, aes(x = Year, y = `Yearly Pct. Change`))
+gg <- gg + geom_hline(yintercept = c(-50, 0, 50), color = "violet")
+gg <- gg + geom_line(lwd = 1)
+gg <- gg + scale_x_continuous(breaks = seq(1997, 2018, 6))
+gg <- gg + facet_wrap(~Country, scales = "free_y")
+gg <- gg + theme(axis.title.x = element_blank())
+gg
+
+```
+
+
+```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', ft.align = "center", echo=FALSE}
+
+df_table <- subset(df_prodPcap, Year >= 2005)
+
+df_table <- df_table %>% group_by(Country) %>%
+  mutate(`Number of years with >25% change since 2005` = length(which(abs(`Yearly Pct. Change`) > 25))) %>%
+  as.data.frame()
+df_table <- subset(df_table[, c("Country", "Year", "Number of years with >25% change since 2005")], Year == 2018)
+df_table$Year <- NULL
+
+this_table <- regulartable(df_table, col_keys = colnames(df_table))
+this_table <- theme_vanilla(this_table)
+#this_table <- autofit(this_table)
+this_table <- width(this_table, width = 1.5)
+knitr::knit_print(this_table)
+
+```
+
+# Producer prices
+
+(The "Beans, dry" price has a lot of missing values for some of these countries, so I used the "Pulses, total" producer price, which seems to track pretty closely with "Beans, dry".)
+
+* In Ethiopia, there has been high producer price volatility with large upward percentage changes since 2000, including at least one 50% increase since 2015.
+
+* In neighboring countries, the producer price volatility has been low.
+
+```{r figX, fig.show = "hold", fig.width = 7, fig.height=4, fig.align="center", fig.cap="Yearly percent change in bean producer price.", echo = FALSE}
+
+# Get producer price for major food groups
+df_raw_pPrice <- read.csv("FAO Data/Prices_E_All_Data.csv", stringsAsFactors = F)
+rm_cols <- c("Area.Code", "Item.Code", "Element.Code", "Months.Code")
+rm_cols <- which(colnames(df_raw_pPrice) %in% rm_cols)
+df_raw_pPrice <- df_raw_pPrice[, -rm_cols]
+df_raw_pPrice$Item <- as.character(df_raw_pPrice$Item)
+df_raw_pPrice$Element <- as.character(df_raw_pPrice$Element)
+df_raw_pPrice$Area <- as.character(df_raw_pPrice$Area)
+u <- colnames(df_raw_pPrice)
+df_raw_pPrice <- df_raw_pPrice[, -grep("F", u)]
+v <- colnames(df_raw_pPrice)[5:ncol(df_raw_pPrice)]
+colnames(df_raw_pPrice)[5:ncol(df_raw_pPrice)] <- gsub("Y", "", v)
+#---------------------------------------------------------------------------
+# Check available years
+#colnames(df_raw_pPrice)
+#---------------------------------------------------------------------------
+available_yrs <- as.character(c(1991:2018))
+df_raw_pPrice <- gather_(df_raw_pPrice, "Year", "Value", gather_cols = available_yrs)
+df_raw_pPrice$Area[grep("Tanzania", df_raw_pPrice$Area)] <- "Tanzania"
+df_raw_pPrice$Year <- as.integer(df_raw_pPrice$Year)
+#---------------------------------------------------------------------------
+#unique(df_raw_pPrice$Element)
+#unique(df_raw_pPrice$Item)[grep("bean", unique(df_raw_pPrice$Item), ignore.case = T)]
+#item_vec <- c("Beans, dry")
+#"Sugar cane", "Fruit excl Melons, Total", "Oilcrops, Oil Equivalent", "Milk, Total", "Roots and Tubers, Total", "Cereals, Total", "Vegetables Primary"
+#item_vec <- c("Pulses, Total", "Beans, dry", "Meat, Total")
+item_vec <- c("Pulses, Total")
+df_pPrice <- subset(df_raw_pPrice, Item %in% item_vec &
+                      Element == "Producer Price Index (2014-2016 = 100)" &
+                      Area %in% area_vec)
+
+df_pPrice <- df_pPrice %>% group_by(Area, Item) %>%
+  mutate(`Yearly Pct. Change` = c(NA, 100 * diff(Value) / Value[-length(Value)])) %>%
+  as.data.frame()
+
+df_plot <- subset(df_pPrice[, c("Area", "Year", "Item", "Yearly Pct. Change")],
+                  Year > 2000)
+# df_plot <- subset(df_pPrice[, c("Area", "Year", "Item", "Value")],
+#                   Year > 2010)
+# colnames(df_plot)[ncol(df_plot)] <- "Producer Price Index (2014-2016 = 100)"
+gg <- ggplot(df_plot, aes(x = Year,
+                          y = `Yearly Pct. Change`))
+gg <- gg + geom_hline(yintercept = c(-50, -25, 0, 25, 50), color = "coral")
+gg <- gg + geom_line(lwd = 1)
+gg <- gg + scale_y_continuous(breaks = c(-50, -25, 0, 25, 50))
+gg <- gg + facet_wrap(~Area)
+gg <- gg + theme(axis.title.x = element_blank())
+gg
+
+```
+
+# Consumer price volatility
+
+FAO does not have consumer price data for specific staples, but you can get a sense of the general food price volatility by looking at the FAO food consumer price index (CPI).
+
+Below are graphs of the food CPI coefficient of variation (for the countries for which data are available). The coefficient of variation is the standard deviation of the monthly food CPI divided by the mean of the monthly food CPI.
+
+The graphs suggest a trend of decreasing volatility in food staple consumer prices.
+
+```{r, fig.show = "hold", fig.width = 7, fig.height=4, fig.align="center", fig.cap="Food CPI coefficient of variation (CV).", echo = FALSE}
+# Get consumer food price volatility
+df_raw_foodCPI <- read.csv("FAO Data/ConsumerPriceIndices_E_All_Data.csv", stringsAsFactors = F)
+rm_cols <- c("Area.Code", "Item.Code", "Months.Code")
+rm_cols <- which(colnames(df_raw_foodCPI) %in% rm_cols)
+df_raw_foodCPI <- df_raw_foodCPI[, -rm_cols]
+#unique(df_raw_foodCPI$Item)
+df_raw_foodCPI$Item <- as.character(df_raw_foodCPI$Item)
+df_raw_foodCPI$Area <- as.character(df_raw_foodCPI$Area)
+u <- colnames(df_raw_foodCPI)
+df_raw_foodCPI <- df_raw_foodCPI[, -grep("F", u)]
+u <- colnames(df_raw_foodCPI)
+df_raw_foodCPI <- df_raw_foodCPI[, -grep("N", u)]
+v <- colnames(df_raw_foodCPI)[5:ncol(df_raw_foodCPI)]
+colnames(df_raw_foodCPI)[5:ncol(df_raw_foodCPI)] <- gsub("Y", "", v)
+#---------------------------------------------------------------------------
+# Check available years
+#colnames(df_raw_foodCPI)
+#---------------------------------------------------------------------------
+available_yrs <- as.character(c(2000:2020))
+df_raw_foodCPI <- gather_(df_raw_foodCPI, "Year", "Value", gather_cols = available_yrs)
+df_raw_foodCPI$Unit <- NULL
+#unique(df_raw_foodCPI$Area[grep("Africa", df_raw_foodCPI$Area, ignore.case = T)])
+#---------------------------------------------------------------------------
+year_vec <- as.character(c(2008:2020))
+df_foodCPI <- subset(df_raw_foodCPI,
+                     Item == "Consumer Prices, Food Indices (2010 = 100)" &
+                       Year %in% year_vec &
+                       Area %in% area_vec)
+#df_foodCPI <- df_foodCPI[which(!is.na(df_foodCPI$Value)), ]
+df_foodCPI <- df_foodCPI %>% group_by(Area, Year) %>% 
+  mutate(CV = sd(Value, na.rm = T) / mean(Value, na.rm = T)) %>%
+  as.data.frame()
+df_foodCPI <- df_foodCPI[-which(duplicated(df_foodCPI$CV)), ]
+df_foodCPI <- df_foodCPI[, c("Area", "Year", "CV")]
+colnames(df_foodCPI)[ncol(df_foodCPI)] <- "Food CPI Volatility (CV)"
+df_foodCPI$Year <- as.integer(df_foodCPI$Year)
+#---------------------------------------------------------------------------
+df_plot <- df_foodCPI
+gg <- ggplot(df_plot, aes(x = Year, y = `Food CPI Volatility (CV)`))
+gg <- gg + geom_line(lwd = 1)
+gg <- gg + scale_x_continuous(breaks = seq(2008, 2018, 2))
+gg <- gg + facet_wrap(~Area)
+gg
+
+
+```
+
+## Yield (1993-2018)
+
+* Bean Yields have been increasing in all countries since 1994.
+
+* However, in Kenya, this just means that yields are beginning to recover to where they were in 1993 (prior to IMF market liberalization). Kenyan yields are the lowest in the group.
+
+* In Rwanda, yields have been declining steadily from 2008-2018, and are headed back to 1990s levels.
+
+* Ethiopia and Uganda exhibit the biggest increase, going from about half a metric ton to over 1.5 metric tons.
+
+```{r, fig.show = "hold", fig.width = 7, fig.height=4, fig.align="center", fig.cap="\\label{fig:yield}Bean yield with 3 year moving average.", echo = FALSE}
+
+df_yield <- df_yield %>% group_by(Country) %>%
+  mutate(`Yield moving average` = TTR::SMA(`Yield (metric tons / ha.)`, 3)) %>%
+  as.data.frame()
+
+#-----------------------------------------------------------------------------
+df_plot <- df_yield
+df_plot <- df_plot %>% gather(Type, Value, `Yield (metric tons / ha.)`:`Yield moving average`)
+gg <- ggplot(df_plot, aes(x = Year, y = Value,
+                              group = Type, color = Type))
+gg <- gg + geom_line(lwd = 1)
+gg <- gg + facet_wrap(~Country, scales = "free_y")
+gg <- gg + scale_x_continuous(breaks = seq(1994, 2018, 6))
+gg <- gg + theme(legend.position = "top",
+                 legend.title = element_blank(),
+                 legend.spacing.x = unit(0.5, 'cm'),
+                 axis.title = element_blank())
+gg
+
+```
+
+```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', ft.align = "center", echo=FALSE}
+
+df_table <- subset(df_yield, Year %in% c(2008, 2018))
+df_table$`Yield moving average` <- NULL
+df_table$`Yearly Pct. Change` <- NULL
+df_table <- df_table %>% spread(Year, `Yield (metric tons / ha.)`)
+df_table$`Pct. change in yield 2008-2018` <- 100 * (df_table$`2018` - df_table$`2008`) / df_table$`2008`
+#colnames(df_table)
+df_table <- df_table[, c("Country", "Pct. change in yield 2008-2018")]
+
+this_table <- regulartable(df_table, col_keys = colnames(df_table))
+this_table <- theme_vanilla(this_table)
+#this_table <- autofit(this_table)
+this_table <- width(this_table, width = 1.5)
+knitr::knit_print(this_table)
+
+```
+
+### Yearly pct. change in yield (1993-2018)
+
+* In Ethiopia, Kenya, and Tanzania, there were some large yearly variations of 10%-25% or more from 1993 up to and during the crisis years 2008-2012. Since then, the volatility has been tapering off in Ethiopia and Tanzania, although Kenya continues to have some years with variations of about 10%.
+
+* In Uganda, the yearly variations in yield have generally been much less, with the important exception of a massive 180% spike in 2008, when Uganda bean yields went from half a metric ton to 1.4 metric tons. (This explains the 2008 spike in production per capita observed above.)
+
+* Rwanda's yield trend has been the least volatile of the group, especially in recent years (2012-2018).
+
+```{r, fig.show = "hold", fig.width = 7, fig.height=4, fig.align="center", fig.cap="\\label{fig:prodPcapYrlyPctChng}Bean yield, yearly percent change.", echo = FALSE}
+
+df_yield <- df_yield %>% group_by(Country) %>%
+  mutate(`Yearly Pct. Change` = c(NA, 100 * diff(`Yield (metric tons / ha.)`) / `Yield (metric tons / ha.)`[-length(`Yield (metric tons / ha.)`)])) %>% as.data.frame()
+
+df_plot <- subset(df_yield, Year >= 1997)
+gg <- ggplot(df_plot, aes(x = Year, y = `Yearly Pct. Change`))
+gg <- gg + geom_hline(yintercept = c(-50, -25, 0, 25, 50), color = "violet")
+gg <- gg + geom_line(lwd = 1)
+gg <- gg + scale_x_continuous(breaks = seq(1997, 2018, 6))
+gg <- gg + facet_wrap(~Country, scales = "free_y")
+gg <- gg + theme(axis.title.x = element_blank())
+gg
+
+```
+
+
+```{r, fig.show='hold', fig.width=8, fig.height=8, fig.align='left', ft.align = "center", echo=FALSE}
+
+df_table <- subset(df_yield, Year >= 2005)
+
+df_table <- df_table %>% group_by(Country) %>%
+  mutate(`Number of years with >15% change in yield since 2005` = length(which(abs(`Yearly Pct. Change`) > 15))) %>%
+  as.data.frame()
+df_table <- subset(df_table[, c("Country", "Year", "Number of years with >15% change in yield since 2005")], Year == 2018)
+df_table$Year <- NULL
+
+this_table <- regulartable(df_table, col_keys = colnames(df_table))
+this_table <- theme_vanilla(this_table)
+#this_table <- autofit(this_table)
+this_table <- width(this_table, width = 1.5)
+knitr::knit_print(this_table)
+
+```
