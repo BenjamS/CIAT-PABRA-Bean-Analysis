@@ -1,0 +1,281 @@
+---
+title: "Beans, a crop to invest in"
+author: "Ben Schiek"
+date: "October 9, 2020"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+options(warn = -1); options(scipen = 999)
+library(tidyverse)
+
+this_folder <- "C:/Users/bensc/OneDrive/Documents/Data/FAO Data/"
+#===========================================================================
+# Define functions
+shift_legend2 <- function(p) {
+  # ...
+  # to grob
+  gp <- ggplotGrob(p)
+  facet.panels <- grep("^panel", gp[["layout"]][["name"]])
+  empty.facet.panels <- sapply(facet.panels, function(i) "zeroGrob" %in% class(gp[["grobs"]][[i]]))
+  empty.facet.panels <- facet.panels[empty.facet.panels]
+  
+  # establish name of empty panels
+  empty.facet.panels <- gp[["layout"]][empty.facet.panels, ]
+  names <- empty.facet.panels$name
+  # example of names:
+  #[1] "panel-3-2" "panel-3-3"
+  
+  # now we just need a simple call to reposition the legend
+  #lemon::reposition_legend(p, 'center', panel=names)
+  p_out <- lemon::reposition_legend(p, 'center', panel=names)
+  #class(lemon::reposition_legend(p, 'center', panel=names))
+  return(p_out)
+}
+#===========================================================================
+
+```
+
+```{r, echo = F}
+#Get production value data
+this_file <- "Value_of_Production_E_All_Data.csv"
+this_filepath <- paste0(this_folder, this_file)
+df_raw <- read.csv(this_filepath, stringsAsFactors = F)
+#colnames(df_raw)
+df_raw$Area.Code <- NULL
+df_raw$Item.Code <- NULL
+df_raw$Element.Code <-NULL
+u <- colnames(df_raw)
+df_raw <- df_raw[, -grep("F", u)]
+ind <- 5:ncol(df_raw)
+u <- colnames(df_raw)[ind]
+colnames(df_raw)[ind] <- gsub("Y", "", u)
+last_yr <- colnames(df_raw)[ncol(df_raw)]
+gathercols <- as.character(1961:last_yr)
+df_raw <- df_raw %>% gather("Year", "Value", gathercols)
+#---------------------------------------------------------------------------
+# Get data for areas and items of interest
+unique(df_raw$Area[grep("Carribbean", df_raw$Area)])
+SSA_vec <- c("Eastern Africa", "Southern Africa", "Middle Africa", "Western Africa")
+area_vec <- c("World","Low Income Food Deficit Countries",
+              #"Net Food Importing Developing Countries", 
+              #"Least Developed Countries",
+              SSA_vec,
+              "South America",
+              "Southern Asia")
+#unique(df_raw$Item)[grep("potato", unique(df_raw$Item), ignore.case = T)]
+cereal_vec <- c("Maize", "Wheat", "Sorghum", "Rice, paddy", "Millet")
+pulses_oilcrops_vec <- c("Beans, dry", "Cow peas, dry", "Chick peas", "Lentils")#, "Soybeans", "Groundnuts, with shell")
+RnT_vec <- c("Cassava", "Yams", "Potatoes", "Sweet potatoes")
+item_vec <- c(cereal_vec, pulses_oilcrops_vec, RnT_vec)
+#unique(df_raw$Area)[grep("africa", unique(df_raw$Area), ignore.case = T)]
+#unique(df_raw$Element)
+#---------------------------------------------------------------------------
+df_vap <- subset(df_raw, Element == "Gross Production Value (current million US$)" &
+                   Area %in% area_vec &
+                   Item %in% item_vec &
+                   Year > 1990)
+df_vap$Unit <- NULL
+df_vap$Element <- NULL
+df_vap$Group <- NA
+u <- df_vap$Item
+df_vap$Group[which(u %in% cereal_vec)] <- "Cereals"
+df_vap$Group[which(u %in% pulses_oilcrops_vec)] <- "Pulses"
+df_vap$Group[which(u %in% RnT_vec)] <- "Roots & Tubers"
+df_vap$Group <- factor(df_vap$Group)
+colnames(df_vap)[4] <- "Production value (current million USD)"
+#---------------------------------------------------------------------------
+# df_plot <- subset(df_vap, Year == 2016 & Area == "World")
+# xx <- df_plot$Group
+# df_plot$Item <- factor(df_plot$Item, levels = unique(df_plot$Item[order(xx)]))
+# gg <- ggplot(df_plot, aes(x = Item, y = `Gross Production Value (current million US$)`, fill = Group))
+# gg <- gg + geom_bar(stat = "identity", position = "dodge")
+# gg <- gg + coord_flip()
+# gg
+
+# df_vap$`Gross Production Value (current million US$)` <- 10^6 * df_vap$`Gross Production Value (current million US$)`
+# colnames(df_vap)[4] <- "Gross Production Value (current USD)"
+
+#===========================================================================
+# Get production quantity data
+this_file <- "Production_Crops_E_All_Data.csv"
+this_filepath <- paste0(this_folder, this_file)
+df_raw <- read.csv(this_filepath, stringsAsFactors = F)
+df_raw <- subset(df_raw, Item.Code != 2928)
+df_raw$Area.Code <- NULL
+df_raw$Item.Code <- NULL
+df_raw$Element.Code <- NULL
+df_raw$Unit <- NULL
+u <- colnames(df_raw)
+df_raw <- df_raw[, -grep("F|N", u)]
+ind <- 4:ncol(df_raw)
+u <- colnames(df_raw)[ind]
+colnames(df_raw)[ind] <- gsub("Y", "", u)
+last_yr <- colnames(df_raw)[ncol(df_raw)]
+gathercols <- as.character(1961:last_yr)
+df_raw <- df_raw %>% gather_("Year", "Value", gathercols)
+#---------------------------------------------------------------------------
+#unique(df_raw$Item)[grep("beans", unique(df_raw$Item), ignore.case = T)]
+df_prod <- subset(df_raw, Item %in% item_vec &
+                    Area %in% area_vec &
+                    Element == "Production" &
+                    Year > 1990)
+df_prod$Element <- NULL
+colnames(df_prod)[4] <- "Production"
+df_prod$Group <- NA
+u <- df_prod$Item
+df_prod$Group[which(u %in% cereal_vec)] <- "Cereals"
+df_prod$Group[which(u %in% pulses_oilcrops_vec)] <- "Pulses"
+df_prod$Group[which(u %in% RnT_vec)] <- "Roots & Tubers"
+df_prod$Group <- factor(df_prod$Group)
+#============================================================================
+# Merge and compute value / unit weight
+df <- merge(df_vap, df_prod, by = c("Area", "Year", "Group", "Item"))
+df$Area[grep("Africa", df$Area)] <- "Sub-Saharan Africa"
+df <- df %>% group_by(Area, Year, Group, Item) %>%
+  summarise(Production = sum(Production, na.rm = T),
+            `Production value (current million USD)` = sum(`Production value (current million USD)`, na.rm = T)) %>%
+  as.data.frame()
+df$`2018 production value / metric ton (current USD)` <- 10^6 * df$`Production value (current million USD)` / df$Production
+#============================================================================
+# kcalMT_cereals_vec <- c(4.14, )
+# df_kcal <- data.frame(Item = item_vec, kcal_per_MT = kcalMT_vec)
+#-----------------------------
+# df_plot <- subset(df, Year == 2018 & Area == "World")
+# xx <- df_plot$Group
+# df_plot$Item <- factor(df_plot$Item, levels = unique(df_plot$Item[order(xx)]))
+# df_plot$Production <- NULL
+# df_plot <- df_plot %>% gather_("Element", "Value", colnames(df_plot[5:6]))
+# gg <- ggplot(df_plot, aes(x = Item, y = Value, fill = Group))
+# gg <- gg + geom_bar(stat = "identity", position = "dodge")
+# gg <- gg + facet_wrap(~Element, scales = "free_y")
+# gg <- gg + theme(axis.title.x = element_blank(),
+#                  axis.text.x = element_text(angle = 60, hjust = 1),
+#                  axis.title.y = element_blank(),
+#                  legend.title = element_blank())
+#gg <- gg + coord_flip()
+#gg
+#-----------------------------
+df_plot <- subset(df, Year == 2018)
+# df_plot$Area[grep("Least Developed Countries", df_plot$Area)] <- "Least Developed\nCountries"
+df_plot$Area[grep("Low Income Food Deficit Countries", df_plot$Area)] <- "Low Income\nFood Deficit Countries"
+xx <- df_plot$Group
+df_plot$Item <- factor(df_plot$Item, levels = unique(df_plot$Item[order(xx)]))
+
+# n <- length(unique(df_plot$Group))
+# bag_of_colors <- randomcoloR::distinctColorPalette(k = 2 * n)
+# color_vec <- sample(bag_of_colors, n)
+color_vec <- c("#8BC53F", "#CAD32B", "#F68B33")
+
+gg <- ggplot(df_plot, aes(x = Item, y = `2018 production value / metric ton (current USD)`, fill = Group))
+gg <- gg + scale_fill_manual(values = color_vec)
+gg <- gg + geom_bar(stat = "identity", position = "dodge", color = "black")
+gg <- gg + facet_wrap(~Area)
+gg <- gg + theme(axis.title.y = element_blank(),
+                 axis.title.x = element_text(size = 8),
+                 axis.text = element_text(size = 7),
+                 legend.title = element_blank(),
+                 legend.text = element_text(size = 8),
+                 strip.text = element_text(size = 8))
+gg <- gg + coord_flip()
+gg <- shift_legend2(gg)
+gg <- ggplotify::as.ggplot(gg)
+
+ggsave("C:/Users/bensc/OneDrive/Documents/Beans AVISA EIB CTEH PABRA/Value per unit weight.png",
+       width = 5, height = 4, units = "in", dpi = 400)
+#============================================================================
+
+#-----------------------------
+#Prep food balance data
+# this_file <- "FoodBalanceSheetsHistoric_E_All_Data.csv"
+# this_filepath <- paste0(this_folder, this_file)
+# df_raw_1 <- read.csv(this_filepath, stringsAsFactors = F)
+# df_raw_1 <- subset(df_raw_1, Item.Code != 2928)
+# this_file <- "FoodBalanceSheets_E_All_Data.csv"
+# this_filepath <- paste0(this_folder, this_file)
+# df_raw_2 <- read.csv(this_filepath, stringsAsFactors = F)
+# df_raw_2 <- subset(df_raw_2, Item.Code != 2928)
+# rm_cols <- c("Area.Code", "Item.Code", "Element.Code")
+# rm_cols <- which(colnames(df_raw_1) %in% rm_cols)
+# df_raw_1 <- df_raw_1[, -rm_cols]
+# df_raw_2 <- df_raw_2[, -rm_cols]
+# df_raw <- merge(df_raw_1, df_raw_2, by = c("Area", "Item", "Element", "Unit"))
+# df_raw$Item <- as.character(df_raw$Item)
+# df_raw$Element <- as.character(df_raw$Element)
+# df_raw$Area <- as.character(df_raw$Area)
+# u <- colnames(df_raw)
+# df_raw <- df_raw[, -grep("F", u)]
+# v <- colnames(df_raw)[5:ncol(df_raw)]
+# colnames(df_raw)[5:ncol(df_raw)] <- gsub("Y", "", v)
+# df_raw <- gather(df_raw,Year,Value,`1961`:`2017`)
+# #---------------------------------------------------------------------------
+# cereal_fbal_vec <- c("Maize and products", "Wheat and products", "Millet and products", "Sorghum and products", "Rice (Milled Equivalent)")
+# pulses_oilcrops_fbal_vec <- c("Beans", "Groundnuts (Shelled Eq)", "Soyabeans")
+# RnT_fbal_vec <- c("Cassava and products", "Sweet potatoes", "Yams", "Potatoes and products")
+# item_fbal_vec <- c(cereal_fbal_vec, pulses_oilcrops_fbal_vec, RnT_fbal_vec, "Population")
+# # item_vec <- c("Cereals - Excluding Beer", "Sugar (Raw Equivalent)", "Starchy Roots",
+# #               "Animal Products", "Pulses", "Vegetal Products", "Grand Total", "Honey",
+# #               "Sugar cane", "Sugar non-centrifugal", "Sweeteners, Other")
+# #element_vec <- c("Food supply (kcal/capita/day)", "Protein supply quantity (g/capita/day)", "Fat supply quantity (g/capita/day)")
+# element_vec <- c("Food supply (kcal/capita/day)", "Total Population - Both sexes")
+# df_fbs <- subset(df_raw, Item %in% item_fbal_vec &
+#                        Area %in% area_vec &
+#                        Element %in% element_vec)
+# df_pop <- subset(df_fbs, Item == "Population")
+# df_fbs <- subset(df_fbs, Item != "Population")
+# colnames(df_fbs)[6] <- "Food supply (kcal/capita/day)"
+# df_fbs$Element <- NULL
+# df_pop$Value <- 1000 * df_pop$Value
+# df_pop$Unit <- NULL
+# colnames(df_pop)[5] <- "Population"
+# df_pop$Item <- NULL
+# df_pop$Element <- NULL
+# df_fbs <- merge(df_fbs, df_pop, by = c("Area", "Year"))
+# df_fbs$`Food supply (million kcal/year)` <- 365 / 10^6 * df_fbs$`Food supply (kcal/capita/day)` * df_fbs$Population
+# df_fbs$Unit <- NULL
+# #---------------
+# df_fbs$Group <- NA
+# u <- df_fbs$Item
+# df_fbs$Group[which(u %in% cereal_fbal_vec)] <- "Cereals"
+# df_fbs$Group[which(u %in% pulses_oilcrops_fbal_vec)] <- "Pulses"
+# df_fbs$Group[which(u %in% RnT_fbal_vec)] <- "Roots & Tubers"
+# df_fbs$Group <- factor(df_fbs$Group)
+# #---------------
+# df_fbs$Item[grep("Maize", u)] <- "Maize"
+# df_fbs$Item[grep("Wheat", u)] <- "Wheat"
+# df_fbs$Item[grep("Sorghum", u)] <- "Sorghum"
+# df_fbs$Item[grep("Rice", u)] <- "Rice, paddy"
+# df_fbs$Item[grep("Millet", u)] <- "Millet"
+# df_fbs$Item[grep("Beans", u)] <- "Beans, dry"
+# df_fbs$Item[grep("Groundnuts", u)] <- "Groundnuts, with shell"
+# df_fbs$Item[grep("Soyabean", u)] <- "Soybeans"
+# df_fbs$Item[grep("Potatoes and products", u)] <- "Potatoes"
+# df_fbs$Item[grep("Cassava", u)] <- "Cassava"
+# #---------------
+# df_fbs$Unit <- NULL
+# df_vap$Unit <- NULL
+# #---------------
+# df <- merge(df_fbs, df_vap, by = c("Area", "Year", "Group", "Item"))
+
+# df$Area[grep("Africa", df$Area)] <- "Sub-Saharan Africa"
+# df <- df %>% group_by(Area, Year, Group, Item) %>%
+#   summarise(`Food supply (million kcal/year)` = sum(`Food supply (million kcal/year)`, na.rm = T),
+#             `Gross Production Value (current million USD)` = sum(`Gross Production Value (current million USD)`, na.rm = T)) %>%
+#   as.data.frame()
+# 
+# df$`Production value / 1000 kcal (current USD)` <- 10^3 * df$`Gross Production Value (current million USD)` / df$`Food supply (million kcal/year)`
+# df <- subset(df, Item != "Soybeans")
+# #---------------
+# #df_plot <- subset(df, Area == "Least Developed Countries" & Year == 2013)
+# df_plot <- subset(df, Year == 2017)
+# xx <- df_plot$Group
+# df_plot$Item <- factor(df_plot$Item, levels = unique(df_plot$Item[order(xx)]))
+# gg <- ggplot(df_plot, aes(x = Item, y = `Production value / 1000 kcal (current USD)`, fill = Group))
+# gg <- gg + geom_bar(stat = "identity", position = "dodge")
+# gg <- gg + facet_wrap(~Area, ncol = 2, scales = "free")
+# gg <- gg + coord_flip()
+# gg
+
+```
